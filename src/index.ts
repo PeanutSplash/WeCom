@@ -17,7 +17,14 @@ let envLoaded = false
 for (const envPath of envPaths) {
   const result = dotenv.config({ path: envPath })
   if (!result.error) {
-    console.log(`成功加载环境`)
+    console.log(`成功加载环境变量文件: ${envPath}`)
+    // 输出所有环境变量（排除敏感信息）
+    const safeEnvVars = Object.fromEntries(
+      Object.entries(process.env)
+        .filter(([key]) => !key.toLowerCase().includes('secret') && !key.toLowerCase().includes('password'))
+        .map(([key, value]) => [key, value?.substring(0, 50) + (value && value.length > 50 ? '...' : '')]),
+    )
+    console.log('已加载的环境变量:', JSON.stringify(safeEnvVars, null, 2))
     envLoaded = true
     break
   }
