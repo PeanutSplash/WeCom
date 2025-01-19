@@ -6,8 +6,11 @@ export const setupLogger = () => {
     format: winston.format.combine(
       winston.format.timestamp(),
       winston.format.colorize(),
-      winston.format.printf(({ timestamp, level, message }) => {
-        return `${timestamp} [${level}]: ${message}`
+      winston.format.json(),
+      winston.format.printf(({ timestamp, level, message, ...meta }) => {
+        const metaStr = Object.keys(meta).length ? 
+          '\n' + JSON.stringify(meta, null, 2) : '';
+        return `${timestamp} [${level}]: ${message}${metaStr}`;
       }),
     ),
     transports: [
