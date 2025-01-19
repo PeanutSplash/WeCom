@@ -82,22 +82,17 @@ export const setupCallbackRoutes = (callbackService: CallbackService) => {
         throw new Error('POST 请求签名验证失败')
       }
 
+      res.status(200).send('success')
+
+      // 异步处理消息
       const decryptedMessage = callbackService.decryptMessage(encrypt)
       const parsedMessage = await parseCallbackMessage(decryptedMessage)
 
-      // 只有当不是 event 类型消息或者事件类型不是 kf_msg_or_event 时才输出日志
-      if (!(parsedMessage.MsgType === 'event' && parsedMessage.Event !== 'kf_msg_or_event')) {
-        logger.info(`收到回调信息，类型为${parsedMessage.MsgType}`, { parsedMessage })
+      if (parsedMessage.MsgType === 'event' && parsedMessage.Event === 'kf_msg_or_event') {
+        await callbackService.handleCallback(parsedMessage)
       }
-
-      // 处理解析后的消息
-      await callbackService.handleCallback(parsedMessage)
-
-      res.status(200).send('success')
     } catch (error) {
-      const message = error instanceof Error ? error.message : '处理回调消息失败'
       logger.error('处理 POST 回调消息失败:', error)
-      res.status(400).send(message)
     }
   }
 

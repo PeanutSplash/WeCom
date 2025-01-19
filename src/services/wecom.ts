@@ -3,6 +3,9 @@ import { WeComResponse, SendMessage } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
 import FormData from 'form-data'
 import fs from 'fs'
+import { convertAmrToMp3, ensureMediaDirectory, type VoiceMessageResult } from '../utils/audio'
+import { promises as fsPromises } from 'fs'
+import path from 'path'
 
 const logger = setupLogger()
 
@@ -255,19 +258,8 @@ export class WeComService {
 
   /**
    * 处理语音消息
-   * @param message 消息对象
-   * @returns 处理结果
    */
-  async handleVoiceMessage(message: any): Promise<{
-    success: boolean
-    filePath?: string
-    fileInfo?: {
-      contentType: string
-      contentLength: number
-      fileName: string
-    }
-    error?: string
-  }> {
+  async handleVoiceMessage(message: any): Promise<VoiceMessageResult> {
     try {
       if (message.msgtype !== 'voice' || !message.voice?.media_id) {
         return { success: false, error: '不是语音消息或没有 media_id' }
@@ -281,29 +273,42 @@ export class WeComService {
 
       // 确保 media 目录存在
       const mediaDir = 'media'
-      if (!fs.existsSync(mediaDir)) {
-        fs.mkdirSync(mediaDir, { recursive: true })
+      await ensureMediaDirectory(mediaDir)
+
+      // 直接转换为 MP3 格式
+      const conversionResult = await convertAmrToMp3(result.data, mediaId, mediaDir)
+
+      if (!conversionResult.success) {
+        logger.error(`转换MP3失败: ${conversionResult.error}`)
+        return {
+          success: false,
+          error: conversionResult.error,
+          fileInfo: {
+            contentType: result.contentType,
+            contentLength: result.contentLength,
+            fileName: result.fileName,
+          }
+        }
       }
 
-      // 保存文件
-      const filePath = `${mediaDir}/${result.fileName}`
-      await fs.promises.writeFile(filePath, result.data)
-
-      logger.info(`语音文件已保存: ${filePath}`)
+      logger.info(`语音文件已转换为MP3: ${conversionResult.filePath}`)
 
       return {
         success: true,
-        filePath,
+        mp3FilePath: conversionResult.filePath,
         fileInfo: {
           contentType: result.contentType,
           contentLength: result.contentLength,
           fileName: result.fileName,
-        },
+        }
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '未知错误'
-      logger.error('处理语音消息时发生错误:', error)
-      return { success: false, error: errorMessage }
+      const errorMessage = error instanceof Error ? error.message : '处理语音消息失败'
+      logger.error('处理语音消息失败:', error)
+      return {
+        success: false,
+        error: errorMessage
+      }
     }
   }
 }
