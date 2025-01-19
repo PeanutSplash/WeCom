@@ -108,21 +108,24 @@ export class CallbackService {
       const decipher = crypto.createDecipheriv('aes-256-cbc', aesKey, iv)
       decipher.setAutoPadding(false)
 
-      let decrypted = Buffer.concat([Buffer.from(decipher.update(message, 'base64')), Buffer.from(decipher.final())])
+      const decrypted = Buffer.concat([Buffer.from(decipher.update(message, 'base64')), Buffer.from(decipher.final())])
 
-      const padLen = decrypted[decrypted.length - 1]
-      if (padLen < 1 || padLen > 32) {
-        throw new Error('Invalid padding length')
-      }
-      decrypted = decrypted.slice(0, decrypted.length - padLen)
-
-      const msgLen = decrypted.readUInt32BE(16)
-      const decryptedMsg = decrypted.slice(20, 20 + msgLen).toString('utf8')
-
-      return decryptedMsg
-    } catch (error: any) {
-      logger.error('解密消息失败:', error.message)
-      throw new Error(`消息解密失败: ${error.message}`)
+      return this.parseDecryptedMessage(decrypted)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      logger.error('解密消息失败:', errorMessage)
+      throw new Error(`消息解密失败: ${errorMessage}`)
     }
+  }
+
+  private parseDecryptedMessage(decrypted: Buffer): string {
+    const padLen = decrypted[decrypted.length - 1]
+    if (padLen < 1 || padLen > 32) {
+      throw new Error('无效的填充长度')
+    }
+
+    const unpaddedData = decrypted.slice(0, decrypted.length - padLen)
+    const msgLen = unpaddedData.readUInt32BE(16)
+    return unpaddedData.slice(20, 20 + msgLen).toString('utf8')
   }
 }

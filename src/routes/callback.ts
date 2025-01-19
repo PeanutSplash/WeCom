@@ -1,31 +1,38 @@
 import { Router } from 'express'
 import { CallbackService } from '../services/callback'
-import { WeComCallbackMessageType } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
 import { verifySignature, parseCallbackMessage } from '../utils/wecom'
 
 const logger = setupLogger()
 const router = Router()
 
+// 优化验证参数的函数
+const validateCallbackParams = (params: any) => {
+  const { msg_signature, timestamp, nonce } = params
+  if (!msg_signature || !timestamp || !nonce) {
+    throw new Error('缺少必要的验证参数')
+  }
+
+  const token = process.env.WECOM_TOKEN
+  const encodingAESKey = process.env.WECOM_ENCODING_AES_KEY
+
+  if (!token || !encodingAESKey) {
+    throw new Error('缺少 WECOM_TOKEN 或 WECOM_ENCODING_AES_KEY 配置')
+  }
+
+  return { token, encodingAESKey, msg_signature, timestamp, nonce }
+}
+
 export const setupCallbackRoutes = (callbackService: CallbackService) => {
-  // 处理回调消息验证
-  router.get('/callback', (req, res) => {
+  // GET 请求处理器 - 用于验证回调配置
+  const handleGetCallback = (req: any, res: any) => {
     try {
-      const { msg_signature, timestamp, nonce, echostr } = req.query
-
-      // 验证参数完整性
-      if (!msg_signature || !timestamp || !nonce || !echostr) {
-        logger.error('缺少必要的验证参数')
-        return res.status(400).send('缺少必要的验证参数')
+      const { echostr } = req.query
+      if (!echostr) {
+        throw new Error('缺少必要的验证参数')
       }
 
-      const token = process.env.WECOM_TOKEN
-      const encodingAESKey = process.env.WECOM_ENCODING_AES_KEY
-
-      if (!token || !encodingAESKey) {
-        logger.error('缺少 WECOM_TOKEN 或 WECOM_ENCODING_AES_KEY 配置')
-        return res.status(500).send('服务器配置错误')
-      }
+      const { token, msg_signature, timestamp, nonce } = validateCallbackParams(req.query)
 
       const isSignatureValid = verifySignature({
         token,
@@ -35,39 +42,61 @@ export const setupCallbackRoutes = (callbackService: CallbackService) => {
         echostr: echostr as string,
       })
 
-      if (isSignatureValid) {
-        // 使用 CallbackService 解密 echostr
-        const decryptedEchoStr = callbackService.decryptMessage(echostr as string)
-        // 直接写入响应流而不是用 res.send()
-        res.writeHead(200, { 'Content-Type': 'text/plain' })
-        res.end(decryptedEchoStr)
-      } else {
-        logger.error('签名验证失败')
-        res.status(403).send('签名验证失败')
+      if (!isSignatureValid) {
+        throw new Error('GET 请求签名验证失败')
       }
-    } catch (error) {
-      logger.error('处理回调验证请求失败:', error)
-      res.status(500).send('处理回调验证请求失败')
-    }
-  })
 
-  // 处理回调消息
-  router.post('/callback', async (req, res) => {
+      const decryptedEchoStr = callbackService.decryptMessage(echostr as string)
+      logger.info('GET 请求返回结果:', { decryptedEchoStr })
+      res.writeHead(200, { 'Content-Type': 'text/plain' })
+      res.end(decryptedEchoStr)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '处理验证请求失败'
+      logger.error('处理 GET 验证请求失败:', error)
+      res.status(400).send(message)
+    }
+  }
+
+  // POST 请求处理器 - 用于接收回调消息
+  const handlePostCallback = async (req: any, res: any) => {
     try {
-      const message = await parseCallbackMessage(req.body)
-      const response = await callbackService.handleCallback(message)
+      const { token, msg_signature, timestamp, nonce } = validateCallbackParams(req.query)
+      const xmlBody = req.body.toString()
 
-      if (response.success) {
-        res.status(200).send('success')
-      } else {
-        logger.error('处理回调消息失败:', response.message)
-        res.status(500).send(response.message)
+      // 从 XML 中提取加密消息
+      const encryptMatch = xmlBody.match(/<Encrypt><!\[CDATA\[(.*?)\]\]><\/Encrypt>/)
+      const encrypt = encryptMatch?.[1]
+      if (!encrypt) {
+        throw new Error('无法解析加密消息')
       }
+
+      const isSignatureValid = verifySignature({
+        token,
+        timestamp: timestamp as string,
+        nonce: nonce as string,
+        msgSignature: msg_signature as string,
+        echostr: encrypt,
+      })
+
+      if (!isSignatureValid) {
+        throw new Error('POST 请求签名验证失败')
+      }
+
+      const decryptedMessage = callbackService.decryptMessage(encrypt)
+      const parsedMessage = await parseCallbackMessage(decryptedMessage)
+      logger.info('解析后的回调消息:', { parsedMessage })
+
+      res.status(200).send('success')
     } catch (error) {
-      logger.error('处理回调请求失败:', error)
-      res.status(500).send('处理回调请求失败')
+      const message = error instanceof Error ? error.message : '处理回调消息失败'
+      logger.error('处理 POST 回调消息失败:', error)
+      res.status(400).send(message)
     }
-  })
+  }
+
+  // 注册路由处理器
+  router.get('/callback', handleGetCallback)
+  router.post('/callback', handlePostCallback)
 
   return router
 }
