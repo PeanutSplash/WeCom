@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  wecom-kf:
+    build: .
+    container_name: wecom-kf
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - WECOM_CORPID=ww9f4a12c1f232a85e
+      - WECOM_SECRET=jHu5JODf2xsb3zeyGYwXcsDYXKd2v3inlxQt4s2LXpM
+      - WECOM_TOKEN=7CtVllpeGfokb89iozYWRvP1
+      - WECOM_ENCODING_AES_KEY=I8KylbOmftinV3XTZYPm4BqihsqXWTptBVBiB2hy5do
+      - PORT=3000
+    volumes:
+      - ./.env:/app/.env
+    restart: unless-stopped 

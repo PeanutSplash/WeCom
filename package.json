@@ -14,7 +14,14 @@
     "test:api:prod": "cross-env NODE_ENV=production ts-node src/test/api.test.ts",
     "clean": "rimraf dist",
     "build:prod": "pnpm run clean && pnpm run build",
-    "start:prod": "node dist/index.js"
+    "start:prod": "node dist/index.js",
+    "docker:build": "docker build -t peanutsplash/wecom-kf:latest .",
+    "docker:push": "docker push peanutsplash/wecom-kf:latest",
+    "docker:build:push": "pnpm run docker:build && pnpm run docker:push",
+    "docker:run": "docker run -p 3000:3000 --env-file .env wecom-kf",
+    "docker:compose": "docker-compose up -d",
+    "docker:compose:build": "docker-compose up -d --build",
+    "docker:logs": "docker-compose logs -f"
   },
   "keywords": [
     "wecom",
