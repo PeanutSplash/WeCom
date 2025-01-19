@@ -44,10 +44,7 @@ export class WeComService {
       const accessToken = await this.getAccessToken()
       logger.info(`准备发送消息，类型: ${message.msgtype}, 接收者: ${message.touser}`)
 
-      const response = await axios.post<WeComResponse>(
-        `${this.baseUrl}/kf/send_msg?access_token=${accessToken}`,
-        message
-      )
+      const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/send_msg?access_token=${accessToken}`, message)
 
       if (response.data.errcode !== 0) {
         throw new Error(`发送消息失败: ${response.data.errmsg}`)
@@ -82,18 +79,15 @@ export class WeComService {
         throw new Error('limit 参数必须在 1-100 之间')
       }
 
-      const response = await axios.post<WeComResponse>(
-        `${this.baseUrl}/kf/account/list?access_token=${accessToken}`,
-        {
-          offset,
-          limit
-        }
-      )
+      const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/account/list?access_token=${accessToken}`, {
+        offset,
+        limit,
+      })
 
       if (response.data.errcode !== 0) {
         logger.error(`获取客服账号列表失败: ${response.data.errmsg}`, {
           error: response.data,
-          params: { offset, limit }
+          params: { offset, limit },
         })
         throw new Error(`获取客服账号列表失败: ${response.data.errmsg}`)
       }
@@ -106,20 +100,33 @@ export class WeComService {
     }
   }
 
-  // 同步消息
+  // 获取消息
   async syncMessage(cursor: string = '', token: string = '', limit: number = 1000): Promise<WeComResponse> {
-    const accessToken = await this.getAccessToken()
-    const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/sync_msg?access_token=${accessToken}`, {
-      cursor,
-      token,
-      limit,
-    })
+    try {
+      // 验证limit参数范围
+      if (limit < 1 || limit > 1000) {
+        throw new Error('limit 参数必须在 1-1000 之间')
+      }
 
-    if (response.data.errcode !== 0) {
-      throw new Error(`同步消息失败: ${response.data.errmsg}`)
+      const accessToken = await this.getAccessToken()
+      logger.info(`开始同步消息，cursor: ${cursor}, token: ${token}, limit: ${limit}`)
+
+      const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/sync_msg?access_token=${accessToken}`, {
+        cursor,
+        token,
+        limit,
+      })
+
+      if (response.data.errcode !== 0) {
+        throw new Error(`同步消息失败: ${response.data.errmsg}`)
+      }
+
+      logger.info(`消息同步成功，next_cursor: ${response.data.next_cursor || '无'}`)
+      return response.data
+    } catch (error) {
+      logger.error('同步消息时发生错误:', error)
+      throw error
     }
-
-    return response.data
   }
 
   // 上传临时素材
@@ -131,19 +138,15 @@ export class WeComService {
       const formData = new FormData()
       formData.append('media', fs.createReadStream(filePath))
 
-      const response = await axios.post<WeComResponse>(
-        `${this.baseUrl}/media/upload?access_token=${accessToken}&type=${type}`,
-        formData,
-        {
-          headers: formData.getHeaders(),
-        }
-      )
+      const response = await axios.post<WeComResponse>(`${this.baseUrl}/media/upload?access_token=${accessToken}&type=${type}`, formData, {
+        headers: formData.getHeaders(),
+      })
 
       if (response.data.errcode !== 0) {
         logger.error(`上传临时素材失败: ${response.data.errmsg}`, {
           error: response.data,
           type,
-          filePath
+          filePath,
         })
         throw new Error(`上传临时素材失败: ${response.data.errmsg}`)
       }
