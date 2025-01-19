@@ -5,17 +5,13 @@ import {
   WeComCallbackImageMessage,
   WeComCallbackVoiceMessage,
   WeComCallbackEventMessage,
-  MessageType,
-  SendMessage,
 } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
 import { WeComService } from './wecom'
 import crypto from 'crypto'
-import path from 'path'
 
 const logger = setupLogger()
 
-// 修改 MessageHandler 类型定义
 interface MessageHandlers {
   text: (message: WeComCallbackTextMessage) => Promise<WeComCallbackResult>
   image: (message: WeComCallbackImageMessage) => Promise<WeComCallbackResult>
@@ -26,35 +22,12 @@ interface MessageHandlers {
 export class CallbackService {
   private readonly messageHandlers: MessageHandlers
 
-  private openKfId: string | null = null
-
   constructor(private readonly wecomService: WeComService) {
     this.messageHandlers = {
       text: this.handleTextMessage.bind(this),
       image: this.handleImageMessage.bind(this),
       voice: this.handleVoiceMessage.bind(this),
       event: this.handleEventMessage.bind(this),
-    }
-  }
-
-  private async getOpenKfId(): Promise<string> {
-    if (this.openKfId) {
-      return this.openKfId
-    }
-
-    try {
-      const response = await this.wecomService.getAccountList()
-      const accounts = response.account_list
-      if (!accounts || accounts.length === 0) {
-        throw new Error('没有可用的客服账号')
-      }
-
-      this.openKfId = accounts[0].open_kfid
-      logger.info(`获取到客服账号: ${this.openKfId}`)
-      return this.openKfId
-    } catch (error) {
-      logger.error('获取客服账号失败:', error)
-      throw error
     }
   }
 
@@ -70,7 +43,6 @@ export class CallbackService {
         }
       }
 
-      // 直接处理消息并返回结果,不执行后续回复逻辑
       return await handler(message as any)
     } catch (error) {
       logger.error(`处理消息失败: ${error instanceof Error ? error.message : '未知错误'}`)
@@ -112,6 +84,10 @@ export class CallbackService {
     const eventType = message.Event
     logger.info(`处理事件消息, 事件类型: ${eventType}`)
 
+    if (eventType === 'kf_msg_or_event') {
+      return await this.handleKfMessageSync(message)
+    }
+
     return {
       success: true,
       data: {
@@ -119,6 +95,63 @@ export class CallbackService {
         eventType,
         event: message.event,
       },
+    }
+  }
+
+  private async handleKfMessageSync(message: WeComCallbackEventMessage): Promise<WeComCallbackResult> {
+    if (!message.Token) {
+      return {
+        success: false,
+        message: '缺少必要的 Token 参数',
+      }
+    }
+
+    try {
+      const syncResult = await this.syncLatestMessage(message.Token)
+
+      logger.info('获取最新消息成功:', syncResult)
+      return {
+        success: true,
+        data: {
+          type: 'event',
+          eventType: message.Event,
+          event: message.event,
+          syncMessages: syncResult,
+        },
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      return {
+        success: false,
+        message: `同步消息失败: ${errorMessage}`,
+      }
+    }
+  }
+
+  private async syncLatestMessage(token: string) {
+    let lastMessage = null
+    let cursor = ''
+    let hasMore = true
+
+    do {
+      const syncResult = await this.wecomService.syncMessage(cursor, token, 1000)
+
+      if (syncResult.msg_list?.length) {
+        lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1]
+      }
+
+      cursor = syncResult.next_cursor || ''
+      hasMore = Boolean(syncResult.has_more)
+
+      // 避免频繁请求
+      await new Promise(resolve => setTimeout(resolve, 200))
+    } while (hasMore)
+
+    return {
+      errcode: 0,
+      msg_list: lastMessage ? [lastMessage] : [],
+      has_more: 0,
+      next_cursor: '',
     }
   }
 
