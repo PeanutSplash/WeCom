@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# 安装 ffmpeg
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 # 安装 pnpm
