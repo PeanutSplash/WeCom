@@ -110,11 +110,28 @@ export class CallbackService {
       const syncResult: any = await this.syncLatestMessage(message.Token)
       logger.info('获取最新消息成功:', syncResult)
 
-      // 发送语音消息
+      // 处理同步到的消息
       if (syncResult.msg_list?.length > 0) {
         const lastMessage = syncResult.msg_list[0]
-        logger.info('准备发送语音回复')
+        
+        // 如果是语音消息，下载语音文件
+        if (lastMessage.msgtype === 'voice' && lastMessage.voice?.media_id) {
+          logger.info('检测到语音消息，准备下载')
+          const voiceResult = await this.wecomService.handleVoiceMessage(lastMessage)
+          
+          if (voiceResult.success) {
+            logger.info('语音文件下载成功：', {
+              filePath: voiceResult.filePath,
+              fileName: voiceResult.fileInfo?.fileName,
+              fileType: voiceResult.fileInfo?.contentType,
+              fileSize: voiceResult.fileInfo?.contentLength
+            })
+          } else {
+            logger.error(`语音文件下载失败: ${voiceResult.error}`)
+          }
+        }
 
+        // 发送语音回复
         try {
           // 上传语音文件获取 media_id
           const voiceMediaId = await this.wecomService.uploadMedia('voice', './assets/hello.amr')
