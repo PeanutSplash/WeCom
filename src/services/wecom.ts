@@ -189,4 +189,121 @@ export class WeComService {
       throw error
     }
   }
+
+  /**
+   * 获取临时素材
+   * @param mediaId 媒体文件ID
+   * @param start 开始字节位置（用于断点下载）
+   * @param end 结束字节位置（用于断点下载）
+   * @returns 返回文件的 Buffer 和相关的元数据
+   */
+  async getMedia(
+    mediaId: string,
+    start?: number,
+    end?: number,
+  ): Promise<{
+    data: Buffer
+    contentType: string
+    contentLength: number
+    fileName: string
+  }> {
+    try {
+      const accessToken = await this.getAccessToken()
+      logger.info(`开始获取临时素材，mediaId: ${mediaId}${start !== undefined ? `, 断点下载 ${start}-${end}` : ''}`)
+
+      const headers: Record<string, string> = {}
+      if (start !== undefined && end !== undefined) {
+        headers['Range'] = `bytes=${start}-${end}`
+      }
+
+      const response = await axios.get(`${this.baseUrl}/media/get`, {
+        params: {
+          access_token: accessToken,
+          media_id: mediaId,
+        },
+        headers,
+        responseType: 'arraybuffer',
+        validateStatus: status => status >= 200 && status <= 206,
+      })
+
+      // 检查错误响应
+      if (response.headers['content-type']?.includes('application/json')) {
+        const errorData = JSON.parse(response.data.toString())
+        throw new Error(`获取临时素材失败: ${errorData.errmsg}`)
+      }
+
+      const contentType = response.headers['content-type'] || 'application/octet-stream'
+      const contentLength = parseInt(response.headers['content-length'] || '0', 10)
+      const contentDisposition = response.headers['content-disposition'] || ''
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const fileName = contentDisposition.split('filename="').pop()?.split('"')[0]
+      const finalFileName = fileName && fileName !== '.amr' ? fileName : `voice_${timestamp}_${mediaId}.amr`
+
+      logger.info(`临时素材获取成功，文件名: ${finalFileName}, 大小: ${contentLength} 字节`)
+
+      return {
+        data: Buffer.from(response.data),
+        contentType,
+        contentLength,
+        fileName: finalFileName,
+      }
+    } catch (error) {
+      logger.error('获取临时素材时发生错误:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 处理语音消息
+   * @param message 消息对象
+   * @returns 处理结果
+   */
+  async handleVoiceMessage(message: any): Promise<{
+    success: boolean
+    filePath?: string
+    fileInfo?: {
+      contentType: string
+      contentLength: number
+      fileName: string
+    }
+    error?: string
+  }> {
+    try {
+      if (message.msgtype !== 'voice' || !message.voice?.media_id) {
+        return { success: false, error: '不是语音消息或没有 media_id' }
+      }
+
+      const mediaId = message.voice.media_id
+      logger.info(`收到语音消息，media_id: ${mediaId}`)
+
+      // 获取语音文件
+      const result = await this.getMedia(mediaId)
+
+      // 确保 media 目录存在
+      const mediaDir = 'media'
+      if (!fs.existsSync(mediaDir)) {
+        fs.mkdirSync(mediaDir, { recursive: true })
+      }
+
+      // 保存文件
+      const filePath = `${mediaDir}/${result.fileName}`
+      await fs.promises.writeFile(filePath, result.data)
+
+      logger.info(`语音文件已保存: ${filePath}`)
+
+      return {
+        success: true,
+        filePath,
+        fileInfo: {
+          contentType: result.contentType,
+          contentLength: result.contentLength,
+          fileName: result.fileName,
+        },
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      logger.error('处理语音消息时发生错误:', error)
+      return { success: false, error: errorMessage }
+    }
+  }
 }

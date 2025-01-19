@@ -8,6 +8,9 @@ dist
 # Environment
 .env
 
+# Media
+media/
+
 # Logs
 logs
 *.log
