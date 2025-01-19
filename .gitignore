@@ -24,4 +24,7 @@ pnpm-debug.log*
 *.ntvs*
 *.njsproj
 *.sln
-*.sw? 
+*.sw?
+
+# Docker Compose
+docker-compose.yml 
