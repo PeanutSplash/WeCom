@@ -1,0 +1,36 @@
+{
+  "name": "wecom-kf",
+  "version": "1.0.0",
+  "description": "企业微信客服消息收发系统",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "pnpm run lint && nodemon src/index.ts",
+    "start": "pnpm run build && node dist/index.js",
+    "build": "tsc",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
+  },
+  "keywords": [
+    "wecom",
+    "客服",
+    "企业微信"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
