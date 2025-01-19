@@ -3,6 +3,7 @@
 基于 Node.js 和 TypeScript 开发的企业微信客服消息收发系统。本系统提供了完整的企业微信客服消息处理能力，包括消息收发、语音转换、客服管理、历史消息同步等功能。
 
 ## 主要功能
+## 主要功能
 
 - 消息收发
   - 支持文本、图片、语音、视频、文件等多种消息类型
@@ -29,7 +30,9 @@
 - Winston (日志管理)
 - Axios (HTTP 请求)
 - Docker (容器化部署)
+- Docker (容器化部署)
 
+## 快速开始
 ## 快速开始
 
 ### 环境要求
@@ -66,17 +69,24 @@ ffmpeg -version
 ### 配置
 
 1. 复制环境变量模板
+1. 复制环境变量模板
 ```bash
 cp .env.example .env
 ```
 
 2. 配置环境变量
+2. 配置环境变量
 ```env
+# 企业微信配置
 # 企业微信配置
 WECOM_CORPID=your_corpid
 WECOM_SECRET=your_secret
 WECOM_TOKEN=your_token
 WECOM_ENCODING_AES_KEY=your_encoding_aes_key
+
+# 服务配置
+PORT=3000
+NODE_ENV=development
 
 # 服务配置
 PORT=3000
@@ -94,8 +104,15 @@ pnpm lint
 
 # 代码格式化
 pnpm lint:fix
+
+# 代码检查
+pnpm lint
+
+# 代码格式化
+pnpm lint:fix
 ```
 
+### 构建和部署
 ### 构建和部署
 
 ```bash
