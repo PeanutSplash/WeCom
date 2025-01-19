@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { WeComResponse, SendMessage } from '../types/wecom'
+import { WeComResponse, SendMessage, MessageType } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
 import FormData from 'form-data'
 import fs from 'fs'
@@ -15,6 +15,15 @@ interface SendVoiceMessageParams {
   msgtype: 'voice'
   voice: {
     media_id: string
+  }
+}
+
+interface SendTextMessageParams {
+  touser: string
+  open_kfid: string
+  msgtype: MessageType.TEXT
+  text: {
+    content: string
   }
 }
 
@@ -310,5 +319,9 @@ export class WeComService {
         error: errorMessage
       }
     }
+  }
+
+  async sendTextMessage(params: SendTextMessageParams): Promise<WeComResponse> {
+    return this.sendMessage(params)
   }
 }

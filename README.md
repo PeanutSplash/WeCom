@@ -6,6 +6,7 @@
 - 语音消息自动转换（AMR 转 MP3）
 - 客服账号管理
 - 消息历史同步
+- AI 智能回复（基于 OpenAI）
 
 ## 技术栈
 
@@ -16,6 +17,7 @@
 - Winston (日志管理)
 - Webpack 5 (构建工具)
 - Docker & Docker Compose
+- OpenAI API (智能对话)
 
 ## 主要功能
 
@@ -23,7 +25,7 @@
   - 支持文本、图片、语音、视频、文件等多种消息类型
   - 语音消息自动转换（AMR 转 MP3）
   - 消息加密解密
-  - 自动回复
+  - AI 智能自动回复
 - 客服管理
   - 获取客服列表
   - 客服账号管理
@@ -34,6 +36,10 @@
   - 回调消息签名验证
   - 消息内容加密传输
   - 自动 Token 管理
+- AI 对话
+  - 基于 OpenAI GPT 模型
+  - 智能上下文理解
+  - 自然语言处理
 
 ## 快速开始
 
@@ -43,6 +49,7 @@
 - pnpm 7+
 - FFmpeg (用于语音转换)
 - Docker (可选，用于容器化部署)
+- OpenAI API Key
 
 ### 安装
 
@@ -82,6 +89,9 @@ WECOM_SECRET=your_secret
 WECOM_TOKEN=your_token
 WECOM_ENCODING_AES_KEY=your_encoding_aes_key
 
+# OpenAI 配置
+OPENAI_API_KEY=your_openai_api_key
+
 # 服务配置
 PORT=3000
 NODE_ENV=development
@@ -116,7 +126,8 @@ src/
 │   └── callback.ts   # 回调处理接口
 ├── services/         # 业务逻辑
 │   ├── wecom.ts      # 企业微信服务
-│   └── callback.ts   # 回调处理服务
+│   ├── callback.ts   # 回调处理服务
+│   └── openai.ts     # OpenAI 服务
 ├── types/            # TypeScript 类型定义
 │   └── wecom.ts      # 企业微信相关类型
 ├── utils/            # 工具函数

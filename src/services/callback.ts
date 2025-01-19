@@ -5,9 +5,11 @@ import {
   WeComCallbackImageMessage,
   WeComCallbackVoiceMessage,
   WeComCallbackEventMessage,
+  MessageType,
 } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
 import { WeComService } from './wecom'
+import { OpenAIService } from './openai'
 import crypto from 'crypto'
 
 const logger = setupLogger()
@@ -21,8 +23,10 @@ interface MessageHandlers {
 
 export class CallbackService {
   private readonly messageHandlers: MessageHandlers
+  private readonly openAIService: OpenAIService
 
   constructor(private readonly wecomService: WeComService) {
+    this.openAIService = new OpenAIService()
     this.messageHandlers = {
       text: this.handleTextMessage.bind(this),
       image: this.handleImageMessage.bind(this),
@@ -113,42 +117,59 @@ export class CallbackService {
       // 处理同步到的消息
       if (syncResult.msg_list?.length > 0) {
         const lastMessage = syncResult.msg_list[0]
-        
+
+        // 处理不同类型的消息
+        if (lastMessage.msgtype === 'text') {
+          // 使用 OpenAI 生成回复
+          const aiResponse = await this.openAIService.generateResponse(lastMessage.text.content)
+
+          // 发送回复消息
+          await this.wecomService.sendTextMessage({
+            touser: lastMessage.external_userid,
+            open_kfid: lastMessage.open_kfid,
+            msgtype: MessageType.TEXT,
+            text: {
+              content: aiResponse,
+            },
+          })
+
+          logger.info('AI 回复已发送')
+        }
         // 如果是语音消息，下载并转换语音文件
-        if (lastMessage.msgtype === 'voice' && lastMessage.voice?.media_id) {
+        else if (lastMessage.msgtype === 'voice' && lastMessage.voice?.media_id) {
           logger.info('检测到语音消息，准备下载并转换')
           const voiceResult = await this.wecomService.handleVoiceMessage(lastMessage)
-          
+
           if (voiceResult.success) {
             logger.info('语音文件处理成功：', {
               mp3File: voiceResult.mp3FilePath,
               fileName: voiceResult.fileInfo?.fileName,
               fileType: voiceResult.fileInfo?.contentType,
-              fileSize: voiceResult.fileInfo?.contentLength
+              fileSize: voiceResult.fileInfo?.contentLength,
             })
           } else {
             logger.error(`语音文件处理失败: ${voiceResult.error}`)
           }
-        }
 
-        // 发送语音回复
-        try {
-          // 上传语音文件获取 media_id
-          const voiceMediaId = await this.wecomService.uploadMedia('voice', './assets/hello.amr')
+          // 发送语音回复
+          try {
+            // 上传语音文件获取 media_id
+            const voiceMediaId = await this.wecomService.uploadMedia('voice', './assets/hello.amr')
 
-          // 使用获取到的 media_id 发送语音消息
-          await this.wecomService.sendVoiceMessage({
-            touser: lastMessage.external_userid,
-            open_kfid: lastMessage.open_kfid,
-            msgtype: 'voice',
-            voice: {
-              media_id: voiceMediaId,
-            },
-          })
-          logger.info('语音消息发送成功')
-        } catch (error) {
-          logger.error('发送语音消息失败:', error)
-          throw error
+            // 使用获取到的 media_id 发送语音消息
+            await this.wecomService.sendVoiceMessage({
+              touser: lastMessage.external_userid,
+              open_kfid: lastMessage.open_kfid,
+              msgtype: 'voice',
+              voice: {
+                media_id: voiceMediaId,
+              },
+            })
+            logger.info('语音消息发送成功')
+          } catch (error) {
+            logger.error('发送语音消息失败:', error)
+            throw error
+          }
         }
       }
 
