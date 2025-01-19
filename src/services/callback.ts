@@ -114,20 +114,20 @@ export class CallbackService {
       if (syncResult.msg_list?.length > 0) {
         const lastMessage = syncResult.msg_list[0]
         
-        // 如果是语音消息，下载语音文件
+        // 如果是语音消息，下载并转换语音文件
         if (lastMessage.msgtype === 'voice' && lastMessage.voice?.media_id) {
-          logger.info('检测到语音消息，准备下载')
+          logger.info('检测到语音消息，准备下载并转换')
           const voiceResult = await this.wecomService.handleVoiceMessage(lastMessage)
           
           if (voiceResult.success) {
-            logger.info('语音文件下载成功：', {
-              filePath: voiceResult.filePath,
+            logger.info('语音文件处理成功：', {
+              mp3File: voiceResult.mp3FilePath,
               fileName: voiceResult.fileInfo?.fileName,
               fileType: voiceResult.fileInfo?.contentType,
               fileSize: voiceResult.fileInfo?.contentLength
             })
           } else {
-            logger.error(`语音文件下载失败: ${voiceResult.error}`)
+            logger.error(`语音文件处理失败: ${voiceResult.error}`)
           }
         }
 
@@ -163,9 +163,10 @@ export class CallbackService {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误'
+      logger.error('处理同步消息失败:', error)
       return {
         success: false,
-        message: `同步消息失败: ${errorMessage}`,
+        message: `处理同步消息失败: ${errorMessage}`,
       }
     }
   }
