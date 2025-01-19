@@ -1,5 +1,8 @@
 import axios from 'axios'
 import { WeComResponse, SendMessage } from '../types/wecom'
+import { setupLogger } from '../utils/logger'
+
+const logger = setupLogger()
 
 export class WeComService {
   private accessToken: string | null = null
@@ -24,21 +27,40 @@ export class WeComService {
       throw new Error(`获取访问令牌失败: ${response.data.errmsg}`)
     }
 
-    this.accessToken = response.data.access_token as string
-    this.tokenExpireTime = Date.now() + response.data.expires_in * 1000
+    if (!response.data.access_token) {
+      throw new Error('获取访问令牌失败: 返回数据不完整')
+    }
+
+    this.accessToken = response.data.access_token
+    this.tokenExpireTime = Date.now() + (response.data.expires_in || 7200) * 1000
     return this.accessToken
   }
 
   // 发送消息
   async sendMessage(message: SendMessage): Promise<WeComResponse> {
-    const accessToken = await this.getAccessToken()
-    const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/send_msg?access_token=${accessToken}`, message)
+    try {
+      const accessToken = await this.getAccessToken()
+      logger.info(`准备发送消息，类型: ${message.msgtype}, 接收者: ${message.touser}`)
 
-    if (response.data.errcode !== 0) {
-      throw new Error(`发送消息失败: ${response.data.errmsg}`)
+      const response = await axios.post<WeComResponse>(
+        `${this.baseUrl}/kf/send_msg?access_token=${accessToken}`,
+        message
+      )
+
+      if (response.data.errcode !== 0) {
+        logger.error(`发送消息失败: ${response.data.errmsg}`, {
+          error: response.data,
+          message
+        })
+        throw new Error(`发送消息失败: ${response.data.errmsg}`)
+      }
+
+      logger.info(`消息发送成功，消息ID: ${response.data.msgid || message.msgid}`)
+      return response.data
+    } catch (error) {
+      logger.error('发送消息时发生错误:', error)
+      throw error
     }
-
-    return response.data
   }
 
   // 获取客服列表
@@ -51,6 +73,40 @@ export class WeComService {
     }
 
     return response.data
+  }
+
+  // 获取客服账号列表（支持分页）
+  async getAccountList(offset: number = 0, limit: number = 100): Promise<WeComResponse> {
+    try {
+      const accessToken = await this.getAccessToken()
+      logger.info(`获取客服账号列表，offset: ${offset}, limit: ${limit}`)
+
+      if (limit < 1 || limit > 100) {
+        throw new Error('limit 参数必须在 1-100 之间')
+      }
+
+      const response = await axios.post<WeComResponse>(
+        `${this.baseUrl}/kf/account/list?access_token=${accessToken}`,
+        {
+          offset,
+          limit
+        }
+      )
+
+      if (response.data.errcode !== 0) {
+        logger.error(`获取客服账号列表失败: ${response.data.errmsg}`, {
+          error: response.data,
+          params: { offset, limit }
+        })
+        throw new Error(`获取客服账号列表失败: ${response.data.errmsg}`)
+      }
+
+      logger.info(`成功获取客服账号列表，数量: ${response.data.account_list?.length || 0}`)
+      return response.data
+    } catch (error) {
+      logger.error('获取客服账号列表时发生错误:', error)
+      throw error
+    }
   }
 
   // 同步消息
