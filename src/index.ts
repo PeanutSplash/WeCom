@@ -24,7 +24,7 @@ for (const envPath of envPaths) {
         .filter(([key]) => !key.toLowerCase().includes('secret') && !key.toLowerCase().includes('password'))
         .map(([key, value]) => [key, value?.substring(0, 50) + (value && value.length > 50 ? '...' : '')]),
     )
-    console.log('已加载的环境变量:', JSON.stringify(safeEnvVars, null, 2))
+    // console.log('已加载的环境变量:', JSON.stringify(safeEnvVars, null, 2))
     envLoaded = true
     break
   }
