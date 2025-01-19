@@ -22,7 +22,6 @@ router.post('/send', async (req, res) => {
     const result = await wecomService.sendMessage(message)
     res.json(result)
   } catch (error) {
-    logger.error('发送消息失败:', error)
     res.status(500).json({ error: '发送消息失败' })
   }
 })

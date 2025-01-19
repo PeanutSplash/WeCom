@@ -84,7 +84,14 @@ export const setupCallbackRoutes = (callbackService: CallbackService) => {
 
       const decryptedMessage = callbackService.decryptMessage(encrypt)
       const parsedMessage = await parseCallbackMessage(decryptedMessage)
-      logger.info('解析后的回调消息:', { parsedMessage })
+
+      // 只有当不是 event 类型消息或者事件类型不是 kf_msg_or_event 时才输出日志
+      if (!(parsedMessage.MsgType === 'event' && parsedMessage.Event !== 'kf_msg_or_event')) {
+        logger.info(`收到回调信息，类型为${parsedMessage.MsgType}`, { parsedMessage })
+      }
+
+      // 处理解析后的消息
+      await callbackService.handleCallback(parsedMessage)
 
       res.status(200).send('success')
     } catch (error) {

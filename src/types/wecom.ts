@@ -5,6 +5,7 @@ export interface WeComResponse {
   access_token?: string
   expires_in?: number
   msgid?: string
+  media_id?: string
   next_cursor?: string
   has_more?: boolean
   msg_list?: Array<{
@@ -178,6 +179,7 @@ export interface LocationMessage {
 // 回调消息基础结构
 export interface WeComCallbackMessage {
   ToUserName: string
+  FromUserName: string
   CreateTime: number
   MsgType: string
   Event?: string
@@ -208,7 +210,34 @@ export interface WeComCallbackVoiceMessage extends WeComCallbackMessage {
   }
 }
 
-export type WeComCallbackMessageType = WeComCallbackTextMessage | WeComCallbackImageMessage | WeComCallbackVoiceMessage
+// 事件类型
+export interface WeComCallbackEventMessage extends WeComCallbackMessage {
+  MsgType: 'event'
+  Event: 'kf_msg_or_event' | 'enter_session' | 'msg_send_fail' | 'user_recall_msg'
+  event: {
+    event_type: string
+    open_kfid: string
+    external_userid?: string
+    scene?: string
+    scene_param?: string
+    welcome_code?: string
+    fail_msgid?: string
+    fail_type?: number
+    recall_msgid?: string
+    wechat_channels?: {
+      nickname?: string
+      shop_nickname?: string
+      scene?: number
+    }
+  }
+}
+
+// 更新 WeComCallbackMessageType 联合类型
+export type WeComCallbackMessageType = 
+  | WeComCallbackTextMessage 
+  | WeComCallbackImageMessage 
+  | WeComCallbackVoiceMessage
+  | WeComCallbackEventMessage
 
 // 回调消息处理结果
 export interface WeComCallbackResult {
