@@ -4,48 +4,74 @@ import {
   WeComCallbackTextMessage,
   WeComCallbackImageMessage,
   WeComCallbackVoiceMessage,
+  WeComCallbackEventMessage,
   MessageType,
   SendMessage,
 } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
 import { WeComService } from './wecom'
 import crypto from 'crypto'
+import path from 'path'
 
 const logger = setupLogger()
 
-// 提取常用常量
-const MESSAGE_TEMPLATES = {
-  text: '收到文本消息：',
-  image: '收到图片消息',
-  voice: '收到语音消息',
-} as const
-
-type MessageHandler<T extends WeComCallbackMessageType = WeComCallbackMessageType> = (message: T) => Promise<WeComCallbackResult>
+// 修改 MessageHandler 类型定义
+interface MessageHandlers {
+  text: (message: WeComCallbackTextMessage) => Promise<WeComCallbackResult>
+  image: (message: WeComCallbackImageMessage) => Promise<WeComCallbackResult>
+  voice: (message: WeComCallbackVoiceMessage) => Promise<WeComCallbackResult>
+  event: (message: WeComCallbackEventMessage) => Promise<WeComCallbackResult>
+}
 
 export class CallbackService {
-  private readonly messageHandlers: Record<string, MessageHandler> = {
-    text: this.handleTextMessage as MessageHandler,
-    image: this.handleImageMessage as MessageHandler,
-    voice: this.handleVoiceMessage as MessageHandler,
+  private readonly messageHandlers: MessageHandlers
+
+  private openKfId: string | null = null
+
+  constructor(private readonly wecomService: WeComService) {
+    this.messageHandlers = {
+      text: this.handleTextMessage.bind(this),
+      image: this.handleImageMessage.bind(this),
+      voice: this.handleVoiceMessage.bind(this),
+      event: this.handleEventMessage.bind(this),
+    }
   }
 
-  constructor(private readonly wecomService: WeComService) {}
+  private async getOpenKfId(): Promise<string> {
+    if (this.openKfId) {
+      return this.openKfId
+    }
+
+    try {
+      const response = await this.wecomService.getAccountList()
+      const accounts = response.account_list
+      if (!accounts || accounts.length === 0) {
+        throw new Error('没有可用的客服账号')
+      }
+
+      this.openKfId = accounts[0].open_kfid
+      logger.info(`获取到客服账号: ${this.openKfId}`)
+      return this.openKfId
+    } catch (error) {
+      logger.error('获取客服账号失败:', error)
+      throw error
+    }
+  }
 
   async handleCallback(message: WeComCallbackMessageType): Promise<WeComCallbackResult> {
     try {
       const { MsgType: msgType } = message
-      logger.info(`收到${msgType}类型消息`)
 
-      const handler = this.messageHandlers[msgType]
+      const handler = this.messageHandlers[msgType as keyof MessageHandlers]
       if (!handler) {
-        logger.warn(`不支持的消息类型: ${msgType}`)
         return {
           success: false,
           message: `不支持的消息类型: ${msgType}`,
         }
       }
 
-      return await handler(message)
+      // 直接处理消息并返回结果,不执行后续回复逻辑
+      return await handler(message as any)
     } catch (error) {
       logger.error(`处理消息失败: ${error instanceof Error ? error.message : '未知错误'}`)
       return {
@@ -55,22 +81,9 @@ export class CallbackService {
     }
   }
 
-  private async createAndSendReply(message: WeComCallbackMessageType, content: string): Promise<void> {
-    const replyMessage: SendMessage = {
-      touser: message.ToUserName,
-      open_kfid: message.OpenKfId || '',
-      msgtype: MessageType.TEXT,
-      text: { content },
-    }
-    await this.wecomService.sendMessage(replyMessage)
-  }
-
   private async handleTextMessage(message: WeComCallbackTextMessage): Promise<WeComCallbackResult> {
     const content = message.text.content
     logger.info(`处理文本消息: ${content.substring(0, 50)}...`)
-
-    await this.createAndSendReply(message, `${MESSAGE_TEMPLATES.text}${content}`)
-
     return {
       success: true,
       data: { type: 'text', content },
@@ -79,10 +92,7 @@ export class CallbackService {
 
   private async handleImageMessage(message: WeComCallbackImageMessage): Promise<WeComCallbackResult> {
     const mediaId = message.image.media_id
-    logger.info(`处理图片消息: ${mediaId}`)
-
-    await this.createAndSendReply(message, MESSAGE_TEMPLATES.image)
-
+    logger.info(`处理图片消息, media_id: ${mediaId}`)
     return {
       success: true,
       data: { type: 'image', mediaId },
@@ -91,13 +101,24 @@ export class CallbackService {
 
   private async handleVoiceMessage(message: WeComCallbackVoiceMessage): Promise<WeComCallbackResult> {
     const mediaId = message.voice.media_id
-    logger.info(`处理语音消息: ${mediaId}`)
-
-    await this.createAndSendReply(message, MESSAGE_TEMPLATES.voice)
-
+    logger.info(`处理语音消息, media_id: ${mediaId}`)
     return {
       success: true,
       data: { type: 'voice', mediaId },
+    }
+  }
+
+  private async handleEventMessage(message: WeComCallbackEventMessage): Promise<WeComCallbackResult> {
+    const eventType = message.Event
+    logger.info(`处理事件消息, 事件类型: ${eventType}`)
+
+    return {
+      success: true,
+      data: {
+        type: 'event',
+        eventType,
+        event: message.event,
+      },
     }
   }
 

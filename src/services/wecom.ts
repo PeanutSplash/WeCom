@@ -1,6 +1,8 @@
 import axios from 'axios'
 import { WeComResponse, SendMessage } from '../types/wecom'
 import { setupLogger } from '../utils/logger'
+import FormData from 'form-data'
+import fs from 'fs'
 
 const logger = setupLogger()
 
@@ -48,17 +50,12 @@ export class WeComService {
       )
 
       if (response.data.errcode !== 0) {
-        logger.error(`发送消息失败: ${response.data.errmsg}`, {
-          error: response.data,
-          message
-        })
         throw new Error(`发送消息失败: ${response.data.errmsg}`)
       }
 
       logger.info(`消息发送成功，消息ID: ${response.data.msgid || message.msgid}`)
       return response.data
     } catch (error) {
-      logger.error('发送消息时发生错误:', error)
       throw error
     }
   }
@@ -123,5 +120,44 @@ export class WeComService {
     }
 
     return response.data
+  }
+
+  // 上传临时素材
+  async uploadMedia(type: 'image' | 'voice' | 'video' | 'file', filePath: string): Promise<string> {
+    try {
+      const accessToken = await this.getAccessToken()
+      logger.info(`准备上传${type}类型的临时素材: ${filePath}`)
+
+      const formData = new FormData()
+      formData.append('media', fs.createReadStream(filePath))
+
+      const response = await axios.post<WeComResponse>(
+        `${this.baseUrl}/media/upload?access_token=${accessToken}&type=${type}`,
+        formData,
+        {
+          headers: formData.getHeaders(),
+        }
+      )
+
+      if (response.data.errcode !== 0) {
+        logger.error(`上传临时素材失败: ${response.data.errmsg}`, {
+          error: response.data,
+          type,
+          filePath
+        })
+        throw new Error(`上传临时素材失败: ${response.data.errmsg}`)
+      }
+
+      const mediaId = response.data.media_id
+      if (!mediaId) {
+        throw new Error('上传临时素材失败: 未返回 media_id')
+      }
+
+      logger.info(`临时素材上传成功，media_id: ${mediaId}`)
+      return mediaId
+    } catch (error) {
+      logger.error('上传临时素材时发生错误:', error)
+      throw error
+    }
   }
 }
