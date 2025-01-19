@@ -6,6 +6,15 @@ import fs from 'fs'
 
 const logger = setupLogger()
 
+interface SendVoiceMessageParams {
+  touser: string
+  open_kfid: string
+  msgtype: 'voice'
+  voice: {
+    media_id: string
+  }
+}
+
 export class WeComService {
   private accessToken: string | null = null
   private tokenExpireTime: number = 0
@@ -160,6 +169,23 @@ export class WeComService {
       return mediaId
     } catch (error) {
       logger.error('上传临时素材时发生错误:', error)
+      throw error
+    }
+  }
+
+  async sendVoiceMessage(params: SendVoiceMessageParams): Promise<WeComResponse> {
+    try {
+      const accessToken = await this.getAccessToken()
+
+      const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/send_msg?access_token=${accessToken}`, params)
+
+      if (response.data.errcode !== 0) {
+        throw new Error(`发送语音消息失败: ${response.data.errmsg}`)
+      }
+      logger.info(`语音消息发送成功，消息ID: ${response.data.msgid}`)
+      return response.data
+    } catch (error) {
+      logger.error('发送语音消息时发生错误:', error)
       throw error
     }
   }

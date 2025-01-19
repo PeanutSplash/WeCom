@@ -107,9 +107,34 @@ export class CallbackService {
     }
 
     try {
-      const syncResult = await this.syncLatestMessage(message.Token)
-
+      const syncResult: any = await this.syncLatestMessage(message.Token)
       logger.info('获取最新消息成功:', syncResult)
+
+      // 发送语音消息
+      if (syncResult.msg_list?.length > 0) {
+        const lastMessage = syncResult.msg_list[0]
+        logger.info('准备发送语音回复')
+
+        try {
+          // 上传语音文件获取 media_id
+          const voiceMediaId = await this.wecomService.uploadMedia('voice', './assets/hello.amr')
+
+          // 使用获取到的 media_id 发送语音消息
+          await this.wecomService.sendVoiceMessage({
+            touser: lastMessage.external_userid,
+            open_kfid: lastMessage.open_kfid,
+            msgtype: 'voice',
+            voice: {
+              media_id: voiceMediaId,
+            },
+          })
+          logger.info('语音消息发送成功')
+        } catch (error) {
+          logger.error('发送语音消息失败:', error)
+          throw error
+        }
+      }
+
       return {
         success: true,
         data: {
