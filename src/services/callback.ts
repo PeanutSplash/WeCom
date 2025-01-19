@@ -140,35 +140,56 @@ export class CallbackService {
           logger.info('检测到语音消息，准备下载并转换')
           const voiceResult = await this.wecomService.handleVoiceMessage(lastMessage)
 
-          if (voiceResult.success) {
+          if (voiceResult.success && voiceResult.mp3FilePath) {
             logger.info('语音文件处理成功：', {
               mp3File: voiceResult.mp3FilePath,
               fileName: voiceResult.fileInfo?.fileName,
               fileType: voiceResult.fileInfo?.contentType,
               fileSize: voiceResult.fileInfo?.contentLength,
             })
+
+            try {
+              // 使用 Whisper 将语音转换为文字
+              const transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
+              logger.info('语音转文字成功:', transcription)
+
+              // 使用 ChatGPT 生成回复
+              const aiResponse = await this.openAIService.generateResponse(transcription)
+
+              // 发送文字回复，只发送 AI 的回复
+              await this.wecomService.sendTextMessage({
+                touser: lastMessage.external_userid,
+                open_kfid: lastMessage.open_kfid,
+                msgtype: MessageType.TEXT,
+                text: {
+                  content: aiResponse,
+                },
+              })
+
+              logger.info('AI 回复已发送')
+            } catch (error) {
+              logger.error('处理语音转文字或生成回复失败:', error)
+              // 发送错误提示
+              await this.wecomService.sendTextMessage({
+                touser: lastMessage.external_userid,
+                open_kfid: lastMessage.open_kfid,
+                msgtype: MessageType.TEXT,
+                text: {
+                  content: '抱歉，我在处理您的语音消息时遇到了问题，请您尝试重新发送或使用文字描述。',
+                },
+              })
+            }
           } else {
             logger.error(`语音文件处理失败: ${voiceResult.error}`)
-          }
-
-          // 发送语音回复
-          try {
-            // 上传语音文件获取 media_id
-            const voiceMediaId = await this.wecomService.uploadMedia('voice', './assets/hello.amr')
-
-            // 使用获取到的 media_id 发送语音消息
-            await this.wecomService.sendVoiceMessage({
+            // 发送错误提示
+            await this.wecomService.sendTextMessage({
               touser: lastMessage.external_userid,
               open_kfid: lastMessage.open_kfid,
-              msgtype: 'voice',
-              voice: {
-                media_id: voiceMediaId,
+              msgtype: MessageType.TEXT,
+              text: {
+                content: '抱歉，我在处理您的语音消息时遇到了问题，请您尝试重新发送或使用文字描述。',
               },
             })
-            logger.info('语音消息发送成功')
-          } catch (error) {
-            logger.error('发送语音消息失败:', error)
-            throw error
           }
         }
       }
