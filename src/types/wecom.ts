@@ -233,11 +233,7 @@ export interface WeComCallbackEventMessage extends WeComCallbackMessage {
 }
 
 // 更新 WeComCallbackMessageType 联合类型
-export type WeComCallbackMessageType = 
-  | WeComCallbackTextMessage 
-  | WeComCallbackImageMessage 
-  | WeComCallbackVoiceMessage
-  | WeComCallbackEventMessage
+export type WeComCallbackMessageType = WeComCallbackTextMessage | WeComCallbackImageMessage | WeComCallbackVoiceMessage | WeComCallbackEventMessage
 
 // 回调消息处理结果
 export interface WeComCallbackResult {

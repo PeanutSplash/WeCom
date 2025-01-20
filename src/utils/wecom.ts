@@ -1,9 +1,6 @@
 import crypto from 'crypto'
 import xml2js from 'xml2js'
 import { WeComCallbackMessageType } from '../types/wecom'
-import { setupLogger } from './logger'
-
-const logger = setupLogger()
 
 /**
  * 验证企业微信回调消息签名
@@ -41,7 +38,7 @@ export const parseCallbackMessage = async (xmlData: string): Promise<WeComCallba
       Token: xml.Token,
       OpenKfId: xml.OpenKfId,
     }
-    
+
     // 只有当不是 event 类型消息或者事件类型不是 kf_msg_or_event 时才输出日志
     // if (!(baseMessage.MsgType === 'event' && baseMessage.Event !== 'kf_msg_or_event')) {
     //   logger.info(`解析回调消息成功: ${JSON.stringify(baseMessage)}`)
@@ -88,12 +85,14 @@ export const parseCallbackMessage = async (xmlData: string): Promise<WeComCallba
             fail_msgid: xml.FailMsgId,
             fail_type: xml.FailType ? parseInt(xml.FailType) : undefined,
             recall_msgid: xml.RecallMsgId,
-            wechat_channels: xml.WechatChannels ? {
-              nickname: xml.WechatChannels.Nickname,
-              shop_nickname: xml.WechatChannels.ShopNickname,
-              scene: xml.WechatChannels.Scene ? parseInt(xml.WechatChannels.Scene) : undefined
-            } : undefined
-          }
+            wechat_channels: xml.WechatChannels
+              ? {
+                  nickname: xml.WechatChannels.Nickname,
+                  shop_nickname: xml.WechatChannels.ShopNickname,
+                  scene: xml.WechatChannels.Scene ? parseInt(xml.WechatChannels.Scene) : undefined,
+                }
+              : undefined,
+          },
         }
       default:
         throw new Error(`不支持的消息类型: ${xml.MsgType}`)

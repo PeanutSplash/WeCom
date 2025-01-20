@@ -1,9 +1,7 @@
 import axios from 'axios'
 import { SendMessage, WeComResponse, MessageType } from '../types/wecom'
 
-const BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'http://47.76.201.205:3002/api/wecom'
-  : 'http://localhost:3000/api/wecom'
+const BASE_URL = process.env.NODE_ENV === 'production' ? 'http://47.76.201.205:3002/api/wecom' : 'http://localhost:3000/api/wecom'
 
 // 测试发送文本消息
 const testSendTextMessage = async () => {

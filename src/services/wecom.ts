@@ -1,13 +1,9 @@
 import axios from 'axios'
 import { WeComResponse, SendMessage, MessageType } from '../types/wecom'
-import { setupLogger } from '../utils/logger'
+
 import FormData from 'form-data'
 import fs from 'fs'
 import { convertAmrToMp3, ensureMediaDirectory, type VoiceMessageResult } from '../utils/audio'
-import { promises as fsPromises } from 'fs'
-import path from 'path'
-
-const logger = setupLogger()
 
 interface SendVoiceMessageParams {
   touser: string
@@ -270,11 +266,16 @@ export class WeComService {
    */
   async handleVoiceMessage(message: any): Promise<VoiceMessageResult> {
     try {
-      if (message.msgtype !== 'voice' || !message.voice?.media_id) {
-        return { success: false, error: '不是语音消息或没有 media_id' }
+      const voiceMessage = Array.isArray(message.msg_list) ? message.msg_list[0] : message
+
+      if (!voiceMessage.voice?.media_id) {
+        logger.error('没有找到 media_id', {
+          voiceData: voiceMessage.voice,
+        })
+        return { success: false, error: '没有找到 media_id' }
       }
 
-      const mediaId = message.voice.media_id
+      const mediaId = voiceMessage.voice.media_id
       logger.info(`收到语音消息，media_id: ${mediaId}`)
 
       // 获取语音文件
@@ -296,7 +297,7 @@ export class WeComService {
             contentType: result.contentType,
             contentLength: result.contentLength,
             fileName: result.fileName,
-          }
+          },
         }
       }
 
@@ -309,14 +310,14 @@ export class WeComService {
           contentType: result.contentType,
           contentLength: result.contentLength,
           fileName: result.fileName,
-        }
+        },
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '处理语音消息失败'
       logger.error('处理语音消息失败:', error)
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       }
     }
   }

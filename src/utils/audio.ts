@@ -1,9 +1,7 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { setupLogger } from './logger'
+
 import { promises as fs } from 'fs'
 import path from 'path'
-
-const logger = setupLogger()
 
 export type AudioConversionResult = {
   success: boolean
