@@ -15,7 +15,7 @@ const customFormat = winston.format.printf(({ level, message, timestamp, ...meta
 
 // 创建全局的 logger 实例
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  // level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(
     winston.format.timestamp({
       format: 'YYYY-MM-DD HH:mm:ss',
