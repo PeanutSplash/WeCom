@@ -19,6 +19,7 @@ pnpm-debug.log*
 
 # IDE
 .idea
+.cursorrules
 .vscode
 *.suo
 *.ntvs*
