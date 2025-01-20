@@ -1,5 +1,4 @@
-import { WeComCallbackEventMessage, WeComCallbackResult, MessageType } from '../../../types/wecom'
-
+import { WeComCallbackEventMessage, WeComCallbackResult, MessageType, SendMessage } from '../../../types/wecom'
 import { WeComService } from '../../wecom'
 import { OpenAIService } from '../../../utils/openai'
 import { XunfeiTTSService } from '../../../utils/xunfei'
@@ -8,18 +7,50 @@ import { convertMp3ToAmr } from '../../../utils/audio'
 import { promises as fs } from 'fs'
 import path from 'path'
 
+interface SyncMessage {
+  msgtype: string
+  text?: { content: string }
+  voice?: { media_id: string }
+  external_userid: string
+  open_kfid: string
+}
+
+interface SyncMessageResult {
+  errcode: number
+  msg_list: SyncMessage[]
+  has_more: boolean
+  next_cursor: string
+}
+
+interface SendMessageParams extends SendMessage {
+  touser: string
+  open_kfid: string
+}
+
+interface SendTextMessageParams extends SendMessageParams {
+  msgtype: MessageType.TEXT
+  text: { content: string }
+}
+
+interface SendVoiceMessageParams extends SendMessageParams {
+  msgtype: MessageType.VOICE
+  voice: { media_id: string }
+}
+
 export class EventMessageHandler {
   private readonly xunfeiService: XunfeiTTSService
 
   constructor(private readonly wecomService: WeComService, private readonly openAIService: OpenAIService) {
-    const xunfeiAppId = process.env.XUNFEI_APP_ID || ''
-    const xunfeiApiKey = process.env.XUNFEI_API_KEY || ''
-    const xunfeiApiSecret = process.env.XUNFEI_API_SECRET || ''
-    const xunfeiVoiceName = process.env.XUNFEI_VOICE_NAME || 'xiaoyan'
+    const { XUNFEI_APP_ID = '', XUNFEI_API_KEY = '', XUNFEI_API_SECRET = '', XUNFEI_VOICE_NAME = 'xiaoyan' } = process.env
 
-    this.xunfeiService = new XunfeiTTSService(xunfeiAppId, xunfeiApiKey, xunfeiApiSecret, xunfeiVoiceName)
+    this.xunfeiService = new XunfeiTTSService(XUNFEI_APP_ID, XUNFEI_API_KEY, XUNFEI_API_SECRET, XUNFEI_VOICE_NAME)
   }
 
+  /**
+   * 处理企业微信回调事件消息
+   * @param message - 企业微信回调事件消息
+   * @returns 处理结果，包含成功状态和相关数据
+   */
   async handle(message: WeComCallbackEventMessage): Promise<WeComCallbackResult> {
     const eventType = message.Event
     logger.info(`处理事件消息, 事件类型: ${eventType}`)
@@ -38,6 +69,11 @@ export class EventMessageHandler {
     }
   }
 
+  /**
+   * 处理客服消息同步事件
+   * @param message - 企业微信回调事件消息
+   * @returns 处理结果，包含成功状态和同步消息数据
+   */
   private async handleKfMessageSync(message: WeComCallbackEventMessage): Promise<WeComCallbackResult> {
     if (!message.Token) {
       return {
@@ -47,124 +83,173 @@ export class EventMessageHandler {
     }
 
     try {
-      const syncResult: any = await this.syncLatestMessage(message.Token)
+      const syncResult = await this.syncLatestMessage(message.Token)
       logger.info('获取最新消息成功:', syncResult)
 
-      if (syncResult.msg_list?.length > 0) {
-        const lastMessage = syncResult.msg_list[0]
-
-        // 提取发送语音消息的通用函数
-        const sendVoiceWithFallback = async (text: string, userId: string, kfId: string) => {
-          try {
-            // 将文本转换为语音 (MP3格式)
-            const audioBuffer = await this.xunfeiService.textToSpeech(text)
-
-            // 将 MP3 转换为 AMR
-            const amrResult = await convertMp3ToAmr(audioBuffer)
-
-            if (!amrResult.success || !amrResult.filePath) {
-              throw new Error(amrResult.error || '转换 AMR 失败')
-            }
-
-            // 读取 AMR 文件并上传
-            const amrBuffer = await fs.readFile(amrResult.filePath)
-            const mediaId = await this.wecomService.uploadMedia('voice', amrBuffer, path.basename(amrResult.filePath))
-
-            // 发送语音消息
-            await this.wecomService.sendVoiceMessage({
-              touser: userId,
-              open_kfid: kfId,
-              msgtype: 'voice',
-              voice: {
-                media_id: mediaId,
-              },
-            })
-
-            // 删除临时 AMR 文件
-            await fs.unlink(amrResult.filePath)
-            logger.info('AI 语音回复已发送')
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : '未知错误'
-            logger.error('语音合成或发送失败，回退到文本消息:', errorMessage)
-
-            // 如果语音处理失败，回退到发送文本消息
-            await this.wecomService.sendTextMessage({
-              touser: userId,
-              open_kfid: kfId,
-              msgtype: MessageType.TEXT,
-              text: {
-                content: text,
-              },
-            })
-          }
-        }
-
-        if (lastMessage.msgtype === 'text') {
-          const aiResponse = await this.openAIService.generateResponse(lastMessage.text.content)
-          await sendVoiceWithFallback(aiResponse, lastMessage.external_userid, lastMessage.open_kfid)
-        } else if (lastMessage.msgtype === 'voice') {
-          // 处理语音消息
-          const voiceResult = await this.wecomService.handleVoiceMessage({
-            voice: { media_id: lastMessage.voice.media_id },
-          })
-
-          if (voiceResult.success && voiceResult.mp3FilePath) {
-            // 使用 Whisper 转换语音为文字
-            const transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
-            logger.info('语音转文字成功:', transcription)
-
-            // 生成 AI 回复
-            const aiResponse = await this.openAIService.generateResponse(transcription)
-
-            // 发送语音回复（带文字回退）
-            await sendVoiceWithFallback(aiResponse, lastMessage.external_userid, lastMessage.open_kfid)
-          }
-        }
+      if (!syncResult.msg_list?.length) {
+        return this.createSuccessResult(message, syncResult)
       }
 
-      return {
-        success: true,
-        data: {
-          type: 'event',
-          eventType: message.Event,
-          event: message.event,
-          syncMessages: syncResult,
-        },
-      }
+      const lastMessage = syncResult.msg_list[0]
+      await this.processMessage(lastMessage)
+
+      return this.createSuccessResult(message, syncResult)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '未知错误'
-      logger.error('处理同步消息失败:', error)
-      return {
-        success: false,
-        message: `处理同步消息失败: ${errorMessage}`,
-      }
+      return this.handleError('处理同步消息失败', error)
     }
   }
 
-  private async syncLatestMessage(token: string) {
+  /**
+   * 处理单条消息
+   * @param message - 同步消息对象
+   */
+  private async processMessage(message: SyncMessageResult['msg_list'][0]): Promise<void> {
+    if (message.msgtype === 'text' && message.text) {
+      const aiResponse = await this.openAIService.generateResponse(message.text.content)
+      await this.sendVoiceWithFallback(aiResponse, message.external_userid, message.open_kfid)
+    } else if (message.msgtype === 'voice' && message.voice) {
+      await this.handleVoiceMessage(message)
+    }
+  }
+
+  /**
+   * 处理语音消息
+   * @param message - 包含语音信息的消息对象
+   */
+  private async handleVoiceMessage(message: SyncMessageResult['msg_list'][0]): Promise<void> {
+    if (!message.voice) return
+
+    const voiceResult = await this.wecomService.handleVoiceMessage({
+      voice: { media_id: message.voice.media_id },
+    })
+
+    if (!voiceResult.success || !voiceResult.mp3FilePath) {
+      throw new Error('语音处理失败')
+    }
+
+    const transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
+    logger.info('语音转文字成功:', transcription)
+
+    const aiResponse = await this.openAIService.generateResponse(transcription)
+    await this.sendVoiceWithFallback(aiResponse, message.external_userid, message.open_kfid)
+  }
+
+  /**
+   * 发送语音消息，如果失败则回退到文本消息
+   * @param text - 要转换为语音的文本内容
+   * @param userId - 接收消息的用户ID
+   * @param kfId - 客服ID
+   */
+  private async sendVoiceWithFallback(text: string, userId: string, kfId: string): Promise<void> {
+    try {
+      const audioBuffer = await this.xunfeiService.textToSpeech(text)
+      const amrResult = await convertMp3ToAmr(audioBuffer)
+
+      if (!amrResult.success || !amrResult.filePath) {
+        throw new Error(amrResult.error || '转换 AMR 失败')
+      }
+
+      const amrBuffer = await fs.readFile(amrResult.filePath)
+      const mediaId = await this.wecomService.uploadMedia('voice', amrBuffer, path.basename(amrResult.filePath))
+
+      await this.sendMessage<SendVoiceMessageParams>({
+        touser: userId,
+        open_kfid: kfId,
+        msgtype: MessageType.VOICE,
+        voice: { media_id: mediaId },
+      })
+
+      await fs.unlink(amrResult.filePath)
+      logger.info('AI 语音回复已发送')
+    } catch (error) {
+      logger.error('语音合成或发送失败，回退到文本消息:', error)
+      await this.sendMessage<SendTextMessageParams>({
+        touser: userId,
+        open_kfid: kfId,
+        msgtype: MessageType.TEXT,
+        text: { content: text },
+      })
+    }
+  }
+
+  /**
+   * 发送消息到企业微信
+   * @param message - 要发送的消息对象
+   */
+  private async sendMessage<T extends SendMessageParams>(message: T): Promise<void> {
+    if (message.msgtype === MessageType.TEXT) {
+      await this.wecomService.sendTextMessage(message as SendTextMessageParams)
+    } else if (message.msgtype === MessageType.VOICE) {
+      await this.wecomService.sendVoiceMessage(message as SendVoiceMessageParams)
+    }
+  }
+
+  /**
+   * 同步最新消息
+   * @param token - 同步消息所需的token
+   * @returns 同步结果，包含最新的消息列表
+   */
+  private async syncLatestMessage(token: string): Promise<SyncMessageResult> {
+    const SYNC_INTERVAL = 200
+    const MAX_PAGE_SIZE = 1000
+
     let lastMessage = null
     let cursor = ''
     let hasMore = true
 
     do {
-      const syncResult = await this.wecomService.syncMessage(cursor, token, 1000)
+      const syncResult = await this.wecomService.syncMessage(cursor, token, MAX_PAGE_SIZE)
 
       if (syncResult.msg_list?.length) {
-        lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1]
+        lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1] as unknown as SyncMessage
       }
 
       cursor = syncResult.next_cursor || ''
       hasMore = Boolean(syncResult.has_more)
 
-      // 避免频繁请求
-      await new Promise(resolve => setTimeout(resolve, 200))
+      if (hasMore) {
+        await new Promise(resolve => setTimeout(resolve, SYNC_INTERVAL))
+      }
     } while (hasMore)
 
     return {
       errcode: 0,
       msg_list: lastMessage ? [lastMessage] : [],
-      has_more: 0,
+      has_more: false,
       next_cursor: '',
+    }
+  }
+
+  /**
+   * 创建成功响应结果
+   * @param message - 原始回调事件消息
+   * @param syncResult - 同步消息结果
+   * @returns 格式化的成功响应对象
+   */
+  private createSuccessResult(message: WeComCallbackEventMessage, syncResult: SyncMessageResult): WeComCallbackResult {
+    return {
+      success: true,
+      data: {
+        type: 'event',
+        eventType: message.Event,
+        event: message.event,
+        syncMessages: syncResult,
+      },
+    }
+  }
+
+  /**
+   * 处理错误并返回统一的错误响应格式
+   * @param message - 错误描述信息
+   * @param error - 错误对象
+   * @returns 格式化的错误响应对象
+   */
+  private handleError(message: string, error: unknown): WeComCallbackResult {
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    logger.error(`${message}:`, error)
+    return {
+      success: false,
+      message: `${message}: ${errorMessage}`,
     }
   }
 }
