@@ -2,6 +2,8 @@ import ffmpeg from 'fluent-ffmpeg'
 
 import { promises as fs } from 'fs'
 import path from 'path'
+import logger from './logger'
+import { cleanupDirectory } from './cleanup'
 
 export type AudioConversionResult = {
   success: boolean
@@ -60,6 +62,13 @@ export const convertAmrToMp3 = async (inputBuffer: Buffer, mediaId: string, outp
 
     // 删除临时 AMR 文件
     await fs.unlink(tempAmrPath)
+
+    // 清理 media 目录
+    await cleanupDirectory({
+      directory: outputDir,
+      maxFiles: 100, // 最多保留100个文件
+      retentionDays: 7, // 文件最多保留7天
+    })
 
     return {
       success: true,
@@ -141,6 +150,13 @@ export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'm
     // 删除临时 MP3 文件
     await fs.unlink(tempMp3Path)
     logger.info('清理临时 MP3 文件完成')
+
+    // 清理 media 目录
+    await cleanupDirectory({
+      directory: mediaDir,
+      maxFiles: 2000, // 最多保留2000个文件
+      retentionDays: 7, // 文件最多保留7天
+    })
 
     return {
       success: true,
