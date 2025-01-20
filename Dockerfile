@@ -1,7 +1,10 @@
 FROM node:18-alpine
 
-# 安装 ffmpeg
-RUN apk add --no-cache ffmpeg
+# 只安装必要的 FFmpeg 包
+RUN apk add --no-cache \
+    ffmpeg \
+    ffmpeg-libs \
+    libavcodec-extra
 
 WORKDIR /app
 
@@ -20,8 +23,11 @@ COPY . .
 # 构建应用
 RUN pnpm build
 
+# 创建媒体文件目录并设置权限
+RUN mkdir -p media && chmod 777 media
+
 # 暴露端口
 EXPOSE 3000
 
 # 启动命令
-CMD ["pnpm", "start:prod"] 
+CMD ["pnpm", "start:prod"]

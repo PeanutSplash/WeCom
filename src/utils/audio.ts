@@ -29,56 +29,45 @@ export type VoiceMessageResult = {
  */
 export const convertAmrToMp3 = async (inputBuffer: Buffer, mediaId: string, outputDir: string = 'media'): Promise<AudioConversionResult> => {
   try {
-    // 确保输出目录存在
     await fs.mkdir(outputDir, { recursive: true })
-
-    // 生成东八区(UTC+8)的时间戳
+    
     const date = new Date()
-    const utc8Time = new Date(date.getTime() + 8 * 60 * 60 * 1000)
-    const timestamp = utc8Time.toISOString().replace(/[:.]/g, '-')
-
+    const timestamp = date.toISOString().replace(/[:.]/g, '-')
+    
     const tempAmrPath = path.join(outputDir, `temp_${timestamp}_${mediaId}.amr`)
     const outputPath = path.join(outputDir, `${timestamp}_${mediaId}.mp3`)
-
-    // 写入临时 AMR 文件
+    
     await fs.writeFile(tempAmrPath, inputBuffer)
-
-    // 执行转换
+    
+    // 使用明确的编码器参数
     await new Promise<void>((resolve, reject) => {
       ffmpeg(tempAmrPath)
         .toFormat('mp3')
-        .audioBitrate('128k')
-        .audioChannels(2)
-        .audioFrequency(44100)
+        .outputOptions([
+          '-c:a libmp3lame',  // 使用 libmp3lame 编码器
+          '-ar 44100',        // 采样率
+          '-ac 2',           // 声道数
+          '-b:a 128k'        // 比特率
+        ])
         .on('error', err => {
           logger.error('音频转换失败:', err)
           reject(err)
         })
-        .on('end', () => {
-          resolve()
-        })
+        .on('end', () => resolve())
         .save(outputPath)
     })
 
-    // 删除临时 AMR 文件
     await fs.unlink(tempAmrPath)
-
-    // 清理 media 目录
-    await cleanupDirectory({
-      directory: outputDir,
-      maxFiles: 100, // 最多保留100个文件
-      retentionDays: 7, // 文件最多保留7天
-    })
-
+    
     return {
       success: true,
-      filePath: outputPath,
+      filePath: outputPath
     }
   } catch (error) {
     logger.error('音频转换失败:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : '音频转换失败',
+      error: error instanceof Error ? error.message : '音频转换失败'
     }
   }
 }
