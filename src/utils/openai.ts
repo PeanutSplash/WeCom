@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import fs from 'fs'
 import { env } from './env'
+import { prompts } from '../prompts'
 
 export class OpenAIService {
   private client: OpenAI
@@ -22,8 +23,7 @@ export class OpenAIService {
         file: fs.createReadStream(audioFilePath),
         model: 'whisper-1',
         language: 'zh',
-        prompt:
-          '请将音频内容转换为清晰的文字。要求:1)忽略背景噪音、语气词和口头禅;2)准确识别并保留所有专业术语和技术词汇;3)根据说话人的语气和停顿合理分段;4)保持语言表达的流畅性和逻辑性;5)如遇到英文单词和数字,保持原有形式不翻译',
+        prompt: prompts.transcription.content,
       })
 
       logger.info('音频转录完成')
@@ -40,7 +40,7 @@ export class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: '你是一个友好的客服助手，请用简洁专业的语气回答用户的问题。',
+            content: prompts.calligraphyMaster.content,
           },
           { role: 'user', content: userMessage },
         ],
