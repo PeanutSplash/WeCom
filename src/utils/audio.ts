@@ -85,3 +85,75 @@ export const ensureMediaDirectory = async (dir: string = 'media'): Promise<void>
     throw error
   }
 }
+
+/**
+ * 将 MP3 音频转换为 AMR 格式
+ */
+export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'media'): Promise<AudioConversionResult> => {
+  try {
+    await ensureMediaDirectory(mediaDir)
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const tempMp3Path = path.join(mediaDir, `temp_${timestamp}.mp3`)
+    const outputAmrPath = path.join(mediaDir, `${timestamp}.amr`)
+
+    logger.info('开始转换音频:', {
+      inputSize: inputBuffer.length,
+      tempMp3Path,
+      outputAmrPath,
+    })
+
+    // 写入临时 MP3 文件
+    await fs.writeFile(tempMp3Path, inputBuffer)
+
+    // 执行转换
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(tempMp3Path)
+        .toFormat('amr')
+        .audioChannels(1) // 单声道
+        .audioFrequency(8000) // AMR-NB 标准采样率
+        .audioBitrate('12.2k') // AMR-NB 标准比特率
+        .addOutputOption('-ac', '1') // 强制单声道
+        .on('start', command => {
+          logger.info('开始执行 FFmpeg 命令:', command)
+        })
+        .on('progress', progress => {
+          logger.debug('转换进度:', progress)
+        })
+        .on('error', err => {
+          logger.error('FFmpeg 转换失败:', err)
+          reject(err)
+        })
+        .on('end', () => {
+          logger.info('FFmpeg 转换完成')
+          resolve()
+        })
+        .save(outputAmrPath)
+    })
+
+    // 验证输出文件
+    const stats = await fs.stat(outputAmrPath)
+    logger.info('AMR 文件生成成功:', {
+      path: outputAmrPath,
+      size: stats.size,
+    })
+
+    // 删除临时 MP3 文件
+    await fs.unlink(tempMp3Path)
+    logger.info('清理临时 MP3 文件完成')
+
+    return {
+      success: true,
+      filePath: outputAmrPath,
+    }
+  } catch (error) {
+    logger.error('MP3 转 AMR 失败:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'MP3 转 AMR 失败',
+    }
+  }
+}

@@ -147,24 +147,28 @@ export class WeComService {
   }
 
   // 上传临时素材
-  async uploadMedia(type: 'image' | 'voice' | 'video' | 'file', filePath: string): Promise<string> {
+  async uploadMedia(type: 'image' | 'voice' | 'video' | 'file', filePathOrBuffer: string | Buffer, fileName?: string): Promise<string> {
     try {
       const accessToken = await this.getAccessToken()
-      logger.info(`准备上传${type}类型的临时素材: ${filePath}`)
+      logger.info(`准备上传${type}类型的临时素材`)
 
       const formData = new FormData()
-      formData.append('media', fs.createReadStream(filePath))
+
+      if (Buffer.isBuffer(filePathOrBuffer)) {
+        // 处理 Buffer 类型输入
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const defaultFileName = `${type}_${timestamp}.${type === 'voice' ? 'mp3' : 'bin'}`
+        formData.append('media', filePathOrBuffer, fileName || defaultFileName)
+      } else {
+        // 处理文件路径字符串
+        formData.append('media', fs.createReadStream(filePathOrBuffer))
+      }
 
       const response = await axios.post<WeComResponse>(`${this.baseUrl}/media/upload?access_token=${accessToken}&type=${type}`, formData, {
         headers: formData.getHeaders(),
       })
 
       if (response.data.errcode !== 0) {
-        logger.error(`上传临时素材失败: ${response.data.errmsg}`, {
-          error: response.data,
-          type,
-          filePath,
-        })
         throw new Error(`上传临时素材失败: ${response.data.errmsg}`)
       }
 
