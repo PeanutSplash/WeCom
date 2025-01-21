@@ -1,7 +1,7 @@
 import WebSocket from 'ws'
 import crypto from 'crypto'
 
-export class XunfeiTTSService {
+export class IflytekTTSService {
   private apiKey: string
   private apiSecret: string
   private appId: string

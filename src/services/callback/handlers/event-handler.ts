@@ -1,7 +1,7 @@
 import { WeComCallbackEventMessage, WeComCallbackResult, MessageType, SendMessage } from '../../../types/wecom'
 import { WeComService } from '../../wecom'
 import { OpenAIService } from '../../../utils/openai'
-import { XunfeiTTSService } from '../../../utils/xunfei'
+import { IflytekTTSService } from '../../../utils/iflytek'
 import logger from '../../../utils/logger'
 import { convertMp3ToAmr } from '../../../utils/audio'
 import { promises as fs } from 'fs'
@@ -38,12 +38,12 @@ interface SendVoiceMessageParams extends SendMessageParams {
 }
 
 export class EventMessageHandler {
-  private readonly xunfeiService: XunfeiTTSService
+  private readonly iflytekService: IflytekTTSService
 
   constructor(private readonly wecomService: WeComService, private readonly openAIService: OpenAIService) {
-    const { XUNFEI_APP_ID = '', XUNFEI_API_KEY = '', XUNFEI_API_SECRET = '', XUNFEI_VOICE_NAME = 'xiaoyan' } = process.env
+    const { IFLYTEK_APP_ID = '', IFLYTEK_API_KEY = '', IFLYTEK_API_SECRET = '', IFLYTEK_VOICE_NAME = 'xiaoyan' } = process.env
 
-    this.xunfeiService = new XunfeiTTSService(XUNFEI_APP_ID, XUNFEI_API_KEY, XUNFEI_API_SECRET, XUNFEI_VOICE_NAME)
+    this.iflytekService = new IflytekTTSService(IFLYTEK_APP_ID, IFLYTEK_API_KEY, IFLYTEK_API_SECRET, IFLYTEK_VOICE_NAME)
   }
 
   /**
@@ -142,7 +142,7 @@ export class EventMessageHandler {
    */
   private async sendVoiceWithFallback(text: string, userId: string, kfId: string): Promise<void> {
     try {
-      const audioBuffer = await this.xunfeiService.textToSpeech(text)
+      const audioBuffer = await this.iflytekService.textToSpeech(text)
       const amrResult = await convertMp3ToAmr(audioBuffer)
 
       if (!amrResult.success || !amrResult.filePath) {
