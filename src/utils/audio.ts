@@ -29,24 +29,25 @@ export type VoiceMessageResult = {
 export const convertAmrToMp3 = async (inputBuffer: Buffer, mediaId: string, outputDir: string = 'media'): Promise<AudioConversionResult> => {
   try {
     await fs.mkdir(outputDir, { recursive: true })
-    
+
     const date = new Date()
     const timestamp = date.toISOString().replace(/[:.]/g, '-')
-    
+
     const tempAmrPath = path.join(outputDir, `temp_${timestamp}_${mediaId}.amr`)
     const outputPath = path.join(outputDir, `${timestamp}_${mediaId}.mp3`)
-    
+
     await fs.writeFile(tempAmrPath, inputBuffer)
-    
+
     // 使用明确的编码器参数
     await new Promise<void>((resolve, reject) => {
       ffmpeg(tempAmrPath)
         .toFormat('mp3')
         .outputOptions([
-          '-c:a libmp3lame',  // 使用 libmp3lame 编码器
-          '-ar 44100',        // 采样率
-          '-ac 2',           // 声道数
-          '-b:a 128k'        // 比特率
+          '-c:a libmp3lame', // 使用 libmp3lame 编码器
+          '-ar 16000', // 采样率
+          '-ac 1', // 声道数
+          '-b:a 16k', // 比特率
+          '-filter:a volume=2.0', // 将音量增加到原来的2倍
         ])
         .on('error', err => {
           logger.error('音频转换失败:', err)
@@ -57,16 +58,16 @@ export const convertAmrToMp3 = async (inputBuffer: Buffer, mediaId: string, outp
     })
 
     await fs.unlink(tempAmrPath)
-    
+
     return {
       success: true,
-      filePath: outputPath
+      filePath: outputPath,
     }
   } catch (error) {
     logger.error('音频转换失败:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : '音频转换失败'
+      error: error instanceof Error ? error.message : '音频转换失败',
     }
   }
 }
@@ -158,6 +159,66 @@ export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'm
     return {
       success: false,
       error: error instanceof Error ? error.message : 'MP3 转 AMR 失败',
+    }
+  }
+}
+
+/**
+ * 将 AMR 音频转换为 PCM 格式
+ * @param inputBuffer AMR 音频的 Buffer 数据
+ * @param mediaId 媒体ID
+ * @param outputDir 输出目录
+ * @param sampleRate 采样率 (默认 16000Hz)
+ * @returns PCM 转换结果
+ */
+export const convertAmrToPcm = async (
+  inputBuffer: Buffer,
+  mediaId: string,
+  outputDir: string = 'media',
+  sampleRate: 8000 | 16000 = 16000,
+): Promise<AudioConversionResult> => {
+  try {
+    await ensureMediaDirectory(outputDir)
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const tempAmrPath = path.join(outputDir, `temp_${timestamp}_${mediaId}.amr`)
+    const outputPath = path.join(outputDir, `${timestamp}_${mediaId}.pcm`)
+
+    await fs.writeFile(tempAmrPath, inputBuffer)
+
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(tempAmrPath)
+        .toFormat('s16le') // 16bit PCM
+        .outputOptions([
+          '-ar ' + sampleRate, // 采样率
+          '-ac 1', // 单声道
+          '-f s16le', // 强制 16bit PCM 格式
+        ])
+        .on('error', err => {
+          logger.error('AMR 转 PCM 失败:', err)
+          reject(err)
+        })
+        .on('end', () => {
+          logger.info('AMR 转 PCM 完成')
+          resolve()
+        })
+        .save(outputPath)
+    })
+
+    await fs.unlink(tempAmrPath)
+
+    return {
+      success: true,
+      filePath: outputPath,
+    }
+  } catch (error) {
+    logger.error('AMR 转 PCM 失败:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'AMR 转 PCM 失败',
     }
   }
 }
