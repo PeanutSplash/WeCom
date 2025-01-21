@@ -18,6 +18,7 @@ services:
       # OpenAI 配置
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_MODEL=${OPENAI_MODEL}
 
       # 讯飞配置
       - IFLYTEK_APP_ID=${IFLYTEK_APP_ID}

@@ -15,6 +15,7 @@ const envSchema = z.object({
   // OpenAI 配置
   OPENAI_API_KEY: z.string().min(1, 'OpenAI API Key 不能为空'),
   OPENAI_BASE_URL: z.string().url().optional(),
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 })
 
 // 验证环境变量

@@ -5,10 +5,13 @@ import { prompts } from '../prompts'
 
 export class OpenAIService {
   private client: OpenAI
+  private model: string
 
   constructor() {
     const baseURL = env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-    logger.info(`初始化 OpenAI 客户端，使用 base URL: ${baseURL}`)
+    this.model = env.OPENAI_MODEL
+    
+    logger.info(`初始化 OpenAI 客户端，使用 base URL: ${baseURL}, 模型: ${this.model}`)
 
     this.client = new OpenAI({
       apiKey: env.OPENAI_API_KEY,
@@ -44,7 +47,7 @@ export class OpenAIService {
           },
           { role: 'user', content: userMessage },
         ],
-        model: 'gpt-4o-mini',
+        model: this.model,
       })
 
       const response = completion.choices[0]?.message?.content || '抱歉，我现在无法回答这个问题。'
