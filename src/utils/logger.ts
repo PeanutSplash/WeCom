@@ -18,7 +18,11 @@ const logger = winston.createLogger({
   // level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(
     winston.format.timestamp({
-      format: 'YYYY-MM-DD HH:mm:ss',
+      format: () => {
+        const date = new Date()
+        const utc8Date = new Date(date.getTime() + 8 * 60 * 60 * 1000)
+        return utc8Date.toISOString().replace('T', ' ').slice(0, 19)
+      },
     }),
     customFormat,
   ),
