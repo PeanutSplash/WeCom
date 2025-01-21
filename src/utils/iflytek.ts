@@ -1,7 +1,6 @@
 import WebSocket from 'ws'
 import crypto from 'crypto'
 import { env } from './env'
-import logger from './logger'
 
 export class IflytekTTSService {
   private readonly appId: string

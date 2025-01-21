@@ -2,7 +2,6 @@ import ffmpeg from 'fluent-ffmpeg'
 
 import { promises as fs } from 'fs'
 import path from 'path'
-import logger from './logger'
 import { cleanupDirectory } from './cleanup'
 
 export type AudioConversionResult = {
