@@ -20,6 +20,7 @@ export type VoiceMessageResult = {
   success: boolean
   mp3FilePath?: string
   fileInfo?: AudioFileInfo
+  rawData?: Buffer
   error?: string
 }
 

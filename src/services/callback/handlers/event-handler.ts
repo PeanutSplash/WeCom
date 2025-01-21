@@ -3,7 +3,7 @@ import { WeComService } from '../../wecom'
 import { OpenAIService } from '../../../utils/openai'
 import { IflytekTTSService } from '../../../utils/iflytek'
 import { IflytekASRService } from '../../../utils/iflytek-asr'
-import { convertMp3ToAmr } from '../../../utils/audio'
+import { convertMp3ToAmr, convertAmrToPcm, convertAmrToMp3 } from '../../../utils/audio'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { env } from '../../../utils/env'
@@ -124,7 +124,7 @@ export class EventMessageHandler {
       voice: { media_id: message.voice.media_id },
     })
 
-    if (!voiceResult.success || !voiceResult.mp3FilePath) {
+    if (!voiceResult.success || !voiceResult.rawData) {
       throw new Error('语音处理失败')
     }
 
@@ -133,24 +133,68 @@ export class EventMessageHandler {
 
     try {
       if (service === 'iflytek') {
-        const audioBuffer = await fs.readFile(voiceResult.mp3FilePath)
+        // 讯飞服务使用PCM格式
+        const pcmResult = await convertAmrToPcm(voiceResult.rawData, message.voice.media_id)
+
+        if (!pcmResult.success || !pcmResult.filePath) {
+          throw new Error('AMR转PCM失败')
+        }
+
+        const audioBuffer = await fs.readFile(pcmResult.filePath)
         transcription = await this.iflytekASRService.recognizeSpeech(audioBuffer)
+
+        // 清理PCM文件
+        await fs.unlink(pcmResult.filePath)
       } else {
+        // OpenAI服务使用MP3格式
+        if (!voiceResult.mp3FilePath) {
+          throw new Error('MP3文件路径不存在')
+        }
         transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
       }
     } catch (error) {
       logger.error(`${service} 语音识别失败:`, error)
+
+      // 切换到备选服务
       if (service === 'iflytek') {
         logger.info('尝试使用 OpenAI 作为备选服务')
         try {
-          transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
+          // 重新从AMR转换为MP3
+          const mp3Result = await convertAmrToMp3(voiceResult.rawData, message.voice.media_id)
+
+          if (!mp3Result.success || !mp3Result.filePath) {
+            throw new Error('AMR转MP3失败')
+          }
+
+          transcription = await this.openAIService.transcribeAudio(mp3Result.filePath)
           service = 'openai'
+
+          // 清理MP3文件
+          await fs.unlink(mp3Result.filePath)
         } catch (fallbackError) {
           logger.error('OpenAI 备选服务也失败:', fallbackError)
           throw new Error('所有语音识别服务都失败了')
         }
       } else {
-        throw error
+        logger.info('尝试使用讯飞作为备选服务')
+        try {
+          // 重新从AMR转换为PCM
+          const pcmResult = await convertAmrToPcm(voiceResult.rawData, message.voice.media_id)
+
+          if (!pcmResult.success || !pcmResult.filePath) {
+            throw new Error('AMR转PCM失败')
+          }
+
+          const audioBuffer = await fs.readFile(pcmResult.filePath)
+          transcription = await this.iflytekASRService.recognizeSpeech(audioBuffer)
+          service = 'iflytek'
+
+          // 清理PCM文件
+          await fs.unlink(pcmResult.filePath)
+        } catch (fallbackError) {
+          logger.error('讯飞备选服务也失败:', fallbackError)
+          throw new Error('所有语音识别服务都失败了')
+        }
       }
     }
 

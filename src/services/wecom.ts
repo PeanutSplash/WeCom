@@ -315,6 +315,7 @@ export class WeComService {
           contentLength: result.contentLength,
           fileName: result.fileName,
         },
+        rawData: result.data
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '处理语音消息失败'
