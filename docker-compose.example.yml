@@ -24,6 +24,9 @@ services:
       - IFLYTEK_APP_ID=${IFLYTEK_APP_ID}
       - IFLYTEK_API_KEY=${IFLYTEK_API_KEY}
       - IFLYTEK_API_SECRET=${IFLYTEK_API_SECRET}
+
+      # 语音识别服务选择
+      - SPEECH_RECOGNITION_SERVICE=${SPEECH_RECOGNITION_SERVICE}
     volumes:
       - ./media:/app/media
       - ./logs:/app/logs

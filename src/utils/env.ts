@@ -16,6 +16,15 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, 'OpenAI API Key 不能为空'),
   OPENAI_BASE_URL: z.string().url().optional(),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+
+  // 讯飞配置
+  IFLYTEK_APP_ID: z.string().min(1, '讯飞 APP ID 不能为空'),
+  IFLYTEK_API_KEY: z.string().min(1, '讯飞 API Key 不能为空'),
+  IFLYTEK_API_SECRET: z.string().min(1, '讯飞 API Secret 不能为空'),
+  IFLYTEK_VOICE_NAME: z.string().default('xiaoyan'),
+
+  // 语音识别服务选择
+  SPEECH_RECOGNITION_SERVICE: z.enum(['openai', 'iflytek']).default('iflytek'),
 })
 
 // 验证环境变量

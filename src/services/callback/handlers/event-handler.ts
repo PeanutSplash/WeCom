@@ -2,10 +2,12 @@ import { WeComCallbackEventMessage, WeComCallbackResult, MessageType, SendMessag
 import { WeComService } from '../../wecom'
 import { OpenAIService } from '../../../utils/openai'
 import { IflytekTTSService } from '../../../utils/iflytek'
+import { IflytekASRService } from '../../../utils/iflytek-asr'
 import logger from '../../../utils/logger'
 import { convertMp3ToAmr } from '../../../utils/audio'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { env } from '../../../utils/env'
 
 interface SyncMessage {
   msgtype: string
@@ -38,12 +40,12 @@ interface SendVoiceMessageParams extends SendMessageParams {
 }
 
 export class EventMessageHandler {
-  private readonly iflytekService: IflytekTTSService
+  private readonly iflytekTTSService: IflytekTTSService
+  private readonly iflytekASRService: IflytekASRService
 
   constructor(private readonly wecomService: WeComService, private readonly openAIService: OpenAIService) {
-    const { IFLYTEK_APP_ID = '', IFLYTEK_API_KEY = '', IFLYTEK_API_SECRET = '', IFLYTEK_VOICE_NAME = 'xiaoyan' } = process.env
-
-    this.iflytekService = new IflytekTTSService(IFLYTEK_APP_ID, IFLYTEK_API_KEY, IFLYTEK_API_SECRET, IFLYTEK_VOICE_NAME)
+    this.iflytekTTSService = new IflytekTTSService()
+    this.iflytekASRService = new IflytekASRService()
   }
 
   /**
@@ -127,8 +129,33 @@ export class EventMessageHandler {
       throw new Error('语音处理失败')
     }
 
-    const transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
-    logger.info('语音转文字成功:', transcription)
+    let transcription: string
+    let service = env.SPEECH_RECOGNITION_SERVICE
+
+    try {
+      if (service === 'iflytek') {
+        const audioBuffer = await fs.readFile(voiceResult.mp3FilePath)
+        transcription = await this.iflytekASRService.recognizeSpeech(audioBuffer)
+      } else {
+        transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
+      }
+    } catch (error) {
+      logger.error(`${service} 语音识别失败:`, error)
+      if (service === 'iflytek') {
+        logger.info('尝试使用 OpenAI 作为备选服务')
+        try {
+          transcription = await this.openAIService.transcribeAudio(voiceResult.mp3FilePath)
+          service = 'openai'
+        } catch (fallbackError) {
+          logger.error('OpenAI 备选服务也失败:', fallbackError)
+          throw new Error('所有语音识别服务都失败了')
+        }
+      } else {
+        throw error
+      }
+    }
+
+    logger.info('语音转文字成功:', { service, transcription })
 
     const aiResponse = await this.openAIService.generateResponse(transcription)
     await this.sendVoiceWithFallback(aiResponse, message.external_userid, message.open_kfid)
@@ -142,7 +169,7 @@ export class EventMessageHandler {
    */
   private async sendVoiceWithFallback(text: string, userId: string, kfId: string): Promise<void> {
     try {
-      const audioBuffer = await this.iflytekService.textToSpeech(text)
+      const audioBuffer = await this.iflytekTTSService.textToSpeech(text)
       const amrResult = await convertMp3ToAmr(audioBuffer)
 
       if (!amrResult.success || !amrResult.filePath) {

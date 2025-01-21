@@ -1,19 +1,27 @@
 import WebSocket from 'ws'
 import crypto from 'crypto'
+import { env } from './env'
+import logger from './logger'
 
 export class IflytekTTSService {
-  private apiKey: string
-  private apiSecret: string
-  private appId: string
-  private voiceName: string
-  private hostUrl: string
+  private readonly appId: string
+  private readonly apiKey: string
+  private readonly apiSecret: string
+  private readonly voiceName: string
+  private readonly hostUrl: string
 
-  constructor(appId: string, apiKey: string, apiSecret: string, voiceName = 'xiaoyan') {
-    this.appId = appId
-    this.apiKey = apiKey
-    this.apiSecret = apiSecret
-    this.voiceName = voiceName
+  constructor() {
+    if (!env.IFLYTEK_APP_ID || !env.IFLYTEK_API_KEY || !env.IFLYTEK_API_SECRET) {
+      throw new Error('讯飞语音合成服务配置不完整')
+    }
+
+    this.appId = env.IFLYTEK_APP_ID
+    this.apiKey = env.IFLYTEK_API_KEY
+    this.apiSecret = env.IFLYTEK_API_SECRET
+    this.voiceName = env.IFLYTEK_VOICE_NAME || 'xiaoyan'
     this.hostUrl = 'wss://tts-api.xfyun.cn/v2/tts'
+
+    logger.info('初始化讯飞语音合成服务')
   }
 
   private getAuthUrl(): string {
