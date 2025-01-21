@@ -1,15 +1,9 @@
-FROM node:18-alpine
-
-# 只安装必要的 FFmpeg 包
-RUN apk add --no-cache \
-    ffmpeg \
-    ffmpeg-libs \
-    libavcodec-extra
+FROM jrottenberg/ffmpeg:4.4-alpine
 
 WORKDIR /app
 
 # 安装 pnpm
-RUN npm install -g pnpm
+RUN apk add --no-cache nodejs npm && npm install -g pnpm
 
 # 复制 package.json 和 pnpm-lock.yaml
 COPY package.json pnpm-lock.yaml ./
