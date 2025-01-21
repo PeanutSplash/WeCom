@@ -58,7 +58,7 @@ export class IflytekTTSService {
             auf: 'audio/L16;rate=16000',
             vcn: this.voiceName,
             speed: 50,
-            volume: 50,
+            volume: 150,
             pitch: 50,
             bgs: 0,
             tte: 'UTF8',
