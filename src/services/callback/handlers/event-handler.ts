@@ -7,6 +7,8 @@ import { convertMp3ToAmr, convertAmrToPcm, convertAmrToMp3 } from '../../../util
 import { promises as fs } from 'fs'
 import path from 'path'
 import { env } from '../../../utils/env'
+import { KnowledgeService } from '../../knowledge'
+import { KnowledgeItem } from '../../../types/knowledge'
 
 interface SyncMessage {
   msgtype: string
@@ -41,10 +43,19 @@ interface SendVoiceMessageParams extends SendMessageParams {
 export class EventMessageHandler {
   private readonly iflytekTTSService: IflytekTTSService
   private readonly iflytekASRService: IflytekASRService
+  private readonly knowledgeService: KnowledgeService
 
   constructor(private readonly wecomService: WeComService, private readonly openAIService: OpenAIService) {
     this.iflytekTTSService = new IflytekTTSService()
     this.iflytekASRService = new IflytekASRService()
+    this.knowledgeService = new KnowledgeService()
+    this.initServices().catch(error => {
+      logger.error('初始化服务失败:', error)
+    })
+  }
+
+  private async initServices(): Promise<void> {
+    await this.knowledgeService.init()
   }
 
   /**
@@ -104,12 +115,82 @@ export class EventMessageHandler {
    * 处理单条消息
    * @param message - 同步消息对象
    */
-  private async processMessage(message: SyncMessageResult['msg_list'][0]): Promise<void> {
+  private async processMessage(message: SyncMessage): Promise<void> {
     if (message.msgtype === 'text' && message.text) {
-      const aiResponse = await this.openAIService.generateResponse(message.text.content)
-      await this.sendVoiceWithFallback(aiResponse, message.external_userid, message.open_kfid)
+      // 首先检查知识库是否有匹配的回答
+      const knowledgeMatch = this.knowledgeService.findMatch(message.text.content)
+
+      if (knowledgeMatch) {
+        logger.info('找到知识库匹配:', { pattern: knowledgeMatch.pattern, response: knowledgeMatch.response })
+
+        // 检查是否有有效的语音媒体ID
+        if (knowledgeMatch.voiceMediaId) {
+          logger.info('使用缓存的语音媒体ID:', knowledgeMatch.voiceMediaId)
+          try {
+            await this.sendMessage<SendVoiceMessageParams>({
+              touser: message.external_userid,
+              open_kfid: message.open_kfid,
+              msgtype: MessageType.VOICE,
+              voice: { media_id: knowledgeMatch.voiceMediaId },
+            })
+          } catch (error) {
+            logger.warn('使用缓存的语音媒体ID失败，尝试重新生成:', error)
+            // 清除失效的语音媒体ID
+            knowledgeMatch.voiceMediaId = undefined
+            knowledgeMatch.voiceMediaExpireTime = undefined
+            // 重新生成语音
+            await this.generateAndSendVoice(knowledgeMatch, message)
+          }
+        } else {
+          // 如果没有缓存的语音，生成新的语音并缓存
+          await this.generateAndSendVoice(knowledgeMatch, message)
+        }
+      } else {
+        const response = await this.openAIService.generateResponse(message.text.content)
+        await this.sendVoiceWithFallback(response, message.external_userid, message.open_kfid)
+      }
     } else if (message.msgtype === 'voice' && message.voice) {
       await this.handleVoiceMessage(message)
+    }
+  }
+
+  /**
+   * 生成并发送语音消息
+   * @param knowledgeItem - 知识库条目
+   * @param message - 原始消息
+   */
+  private async generateAndSendVoice(knowledgeItem: KnowledgeItem, message: SyncMessage): Promise<void> {
+    try {
+      const audioBuffer = await this.iflytekTTSService.textToSpeech(knowledgeItem.response)
+      const amrResult = await convertMp3ToAmr(audioBuffer)
+
+      if (!amrResult.success || !amrResult.filePath) {
+        throw new Error(amrResult.error || '转换 AMR 失败')
+      }
+
+      const amrBuffer = await fs.readFile(amrResult.filePath)
+      const mediaId = await this.wecomService.uploadMedia('voice', amrBuffer, path.basename(amrResult.filePath))
+
+      // 缓存语音媒体ID
+      await this.knowledgeService.updateVoiceMediaId(knowledgeItem.pattern.toString(), mediaId)
+
+      await this.sendMessage<SendVoiceMessageParams>({
+        touser: message.external_userid,
+        open_kfid: message.open_kfid,
+        msgtype: MessageType.VOICE,
+        voice: { media_id: mediaId },
+      })
+
+      await fs.unlink(amrResult.filePath)
+      logger.info('AI 语音回复已发送并缓存')
+    } catch (error) {
+      logger.error('语音合成或发送失败，回退到文本消息:', error)
+      await this.sendMessage<SendTextMessageParams>({
+        touser: message.external_userid,
+        open_kfid: message.open_kfid,
+        msgtype: MessageType.TEXT,
+        text: { content: knowledgeItem.response },
+      })
     }
   }
 
@@ -117,7 +198,7 @@ export class EventMessageHandler {
    * 处理语音消息
    * @param message - 包含语音信息的消息对象
    */
-  private async handleVoiceMessage(message: SyncMessageResult['msg_list'][0]): Promise<void> {
+  private async handleVoiceMessage(message: SyncMessage): Promise<void> {
     if (!message.voice) return
 
     const voiceResult = await this.wecomService.handleVoiceMessage({
