@@ -22,7 +22,7 @@ for (const envPath of envPaths) {
 }
 
 if (!envLoaded) {
-  console.warn('警告: 未能找到 .env 文件')
+  console.log('未能找到 .env 文件,使用默认环境变量')
 }
 
 // 验证环境变量

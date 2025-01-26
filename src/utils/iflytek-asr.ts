@@ -49,7 +49,7 @@ export class IflytekASRService {
     this.apiKey = env.IFLYTEK_API_KEY
     this.apiSecret = env.IFLYTEK_API_SECRET
     this.hostUrl = 'wss://iat-api.xfyun.cn/v2/iat'
-    logger.info('初始化讯飞语音识别服务')
+    logger.info('语音识别服务：讯飞')
   }
 
   /**
@@ -162,7 +162,7 @@ export class IflytekASRService {
       })
 
       ws.on('close', () => {
-        logger.info('讯飞WebSocket连接已关闭')
+        logger.debug('讯飞WebSocket连接已关闭')
       })
     })
   }

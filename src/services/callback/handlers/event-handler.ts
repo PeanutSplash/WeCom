@@ -68,7 +68,7 @@ export class EventMessageHandler {
    */
   async handle(message: WeComCallbackEventMessage): Promise<WeComCallbackResult> {
     const eventType = message.Event
-    logger.info(`处理事件消息, 事件类型: ${eventType}`)
+    logger.debug(`处理事件消息, 事件类型: ${eventType}`)
 
     if (eventType === 'kf_msg_or_event') {
       return await this.handleKfMessageSync(message)
@@ -185,7 +185,7 @@ export class EventMessageHandler {
       })
 
       await fs.unlink(amrResult.filePath)
-      logger.info('AI 语音回复已发送并缓存')
+      logger.debug('AI 语音回复已发送并缓存')
     } catch (error) {
       logger.error('语音合成或发送失败，回退到文本消息:', error)
       await this.sendMessage<SendTextMessageParams>({
@@ -314,7 +314,7 @@ export class EventMessageHandler {
       })
 
       await fs.unlink(amrResult.filePath)
-      logger.info('AI 语音回复已发送')
+      logger.debug('AI 语音回复已发送')
     } catch (error) {
       logger.error('语音合成或发送失败，回退到文本消息:', error)
       await this.sendMessage<SendTextMessageParams>({

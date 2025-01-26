@@ -37,7 +37,7 @@ export class KnowledgeService {
    */
   async init(): Promise<void> {
     try {
-      logger.info(`初始化知识库，文件路径: ${this.knowledgeFilePath}`)
+      logger.debug(`知识库路径: ${this.knowledgeFilePath}`)
       const dataDir = path.dirname(this.knowledgeFilePath)
       await fs.mkdir(dataDir, { recursive: true })
 

@@ -96,7 +96,7 @@ export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'm
     const tempMp3Path = path.join(mediaDir, `temp_${timestamp}.mp3`)
     const outputAmrPath = path.join(mediaDir, `${timestamp}.amr`)
 
-    logger.info('开始转换音频:', {
+    logger.debug('开始转换音频:', {
       inputSize: inputBuffer.length,
       tempMp3Path,
       outputAmrPath,
@@ -114,7 +114,7 @@ export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'm
         .audioBitrate('12.2k') // AMR-NB 标准比特率
         .addOutputOption('-ac', '1') // 强制单声道
         .on('start', command => {
-          logger.info('开始执行 FFmpeg 命令:', command)
+          logger.debug('开始执行 FFmpeg 命令:', command)
         })
         .on('progress', progress => {
           logger.debug('转换进度:', progress)
@@ -124,7 +124,7 @@ export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'm
           reject(err)
         })
         .on('end', () => {
-          logger.info('FFmpeg 转换完成')
+          logger.debug('FFmpeg 转换完成')
           resolve()
         })
         .save(outputAmrPath)
@@ -132,14 +132,14 @@ export const convertMp3ToAmr = async (inputBuffer: Buffer, mediaDir: string = 'm
 
     // 验证输出文件
     const stats = await fs.stat(outputAmrPath)
-    logger.info('AMR 文件生成成功:', {
+    logger.debug('AMR 文件生成成功:', {
       path: outputAmrPath,
       size: stats.size,
     })
 
     // 删除临时 MP3 文件
     await fs.unlink(tempMp3Path)
-    logger.info('清理临时 MP3 文件完成')
+    logger.debug('清理临时 MP3 文件完成')
 
     // 清理 media 目录
     await cleanupDirectory({

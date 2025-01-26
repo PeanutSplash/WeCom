@@ -126,7 +126,7 @@ export class WeComService {
       }
 
       const accessToken = await this.getAccessToken()
-      logger.info(`开始同步消息，cursor: ${cursor}, token: ${token}, limit: ${limit}`)
+      logger.debug(`开始同步消息，cursor: ${cursor}, token: ${token}, limit: ${limit}`)
 
       const response = await axios.post<WeComResponse>(`${this.baseUrl}/kf/sync_msg?access_token=${accessToken}`, {
         cursor,
@@ -138,7 +138,7 @@ export class WeComService {
         throw new Error(`同步消息失败: ${response.data.errmsg}`)
       }
 
-      logger.info(`消息同步成功，next_cursor: ${response.data.next_cursor || '无'}`)
+      logger.debug(`消息同步成功，next_cursor: ${response.data.next_cursor || '无'}`)
       return response.data
     } catch (error) {
       logger.error('同步消息时发生错误:', error)
@@ -150,7 +150,7 @@ export class WeComService {
   async uploadMedia(type: 'image' | 'voice' | 'video' | 'file', filePathOrBuffer: string | Buffer, fileName?: string): Promise<string> {
     try {
       const accessToken = await this.getAccessToken()
-      logger.info(`准备上传${type}类型的临时素材`)
+      logger.debug(`准备上传${type}类型的临时素材`)
 
       const formData = new FormData()
 
@@ -177,7 +177,7 @@ export class WeComService {
         throw new Error('上传临时素材失败: 未返回 media_id')
       }
 
-      logger.info(`临时素材上传成功，media_id: ${mediaId}`)
+      logger.debug(`临时素材上传成功，media_id: ${mediaId}`)
       return mediaId
     } catch (error) {
       logger.error('上传临时素材时发生错误:', error)

@@ -20,7 +20,7 @@ export class IflytekTTSService {
     this.voiceName = env.IFLYTEK_VOICE_NAME || 'xiaoyan'
     this.hostUrl = 'wss://tts-api.xfyun.cn/v2/tts'
 
-    logger.info('初始化讯飞语音合成服务')
+    logger.info('语音合成服务：讯飞')
   }
 
   private getAuthUrl(): string {
@@ -105,7 +105,7 @@ export class IflytekTTSService {
       })
 
       ws.on('close', () => {
-        logger.info('讯飞WebSocket连接已关闭')
+        logger.debug('讯飞WebSocket连接已关闭')
       })
     })
   }

@@ -3,7 +3,9 @@
     {
       "pattern": "你好|在吗|问候",
       "isRegex": true,
-      "response": "贫僧怀素，字藏真，见过施主。可是对书法一道有所困惑？"
+      "response": "贫僧怀素，字藏真，见过施主。可是对书法一道有所困惑？",
+      "voiceMediaId": "3mFp2LwvNS1NqQ67LiITmU95e_duwKDEhSzeODftmh-rVTTsVmWX43tW_16eKGv2_",
+      "voiceMediaExpireTime": 1738136486005
     },
     {
       "pattern": "再见|告辞",

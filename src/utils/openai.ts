@@ -10,8 +10,8 @@ export class OpenAIService {
   constructor() {
     const baseURL = env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
     this.model = env.OPENAI_MODEL
-    
-    logger.info(`初始化 OpenAI 客户端，使用 base URL: ${baseURL}, 模型: ${this.model}`)
+
+    logger.info(`LLM初始化, base URL: ${baseURL}, 模型: ${this.model}`)
 
     this.client = new OpenAI({
       apiKey: env.OPENAI_API_KEY,
