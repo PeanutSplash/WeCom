@@ -98,7 +98,7 @@ export class EventMessageHandler {
     }
 
     try {
-      const syncResult = await this.syncLatestMessage(message.Token)
+      const syncResult = await this.syncLatestMessage(message.Token, message)
       logger.info('获取最新消息成功:', syncResult)
 
       if (!syncResult.msg_list?.length) {
@@ -340,54 +340,66 @@ export class EventMessageHandler {
 
   /**
    * 生成用户的唯一标识
-   * @param openKfid - 客服账号ID
-   * @param externalUserId - 客户UserID
+   * @param openKfId - 客服ID
+   * @param corpId - 企业ID
    * @returns 用户唯一标识
    */
-  private generateUserId(openKfid: string, externalUserId: string): string {
-    return `${openKfid}:${externalUserId}`
+  private generateUserId(openKfId: string, corpId: string): string {
+    return `${openKfId}:${corpId}`
   }
 
   /**
    * 同步最新消息
    * @param token - 同步消息所需的token
+   * @param message - 回调事件消息
    * @returns 同步结果，包含最新的消息列表
    */
-  private async syncLatestMessage(token: string): Promise<SyncMessageResult> {
+  private async syncLatestMessage(token: string, message: WeComCallbackEventMessage): Promise<SyncMessageResult> {
     const SYNC_INTERVAL = 200
     const MAX_PAGE_SIZE = 1000
     let lastMessage = null
-    let cursor = ''
     let hasMore = true
-    let userId = ''
+    let cursor = ''
 
-    // 第一次调用，获取最新一条消息以确定用户身份
-    const initialResult = await this.wecomService.syncMessage('', token, 1)
-    const firstMessage = initialResult?.msg_list?.[0] as SyncMessage | undefined
+    // 从回调消息中获取用户标识
+    if (!message.OpenKfId || !message.ToUserName) {
+      throw new Error('缺少必要的消息参数')
+    }
+    const userId = this.generateUserId(message.OpenKfId, message.ToUserName)
+    cursor = await this.cursorManager.getCursor(userId)
 
-    if (firstMessage?.open_kfid && firstMessage?.external_userid) {
-      userId = this.generateUserId(firstMessage.open_kfid, firstMessage.external_userid)
-      cursor = await this.cursorManager.getCursor(userId)
+    // 同步消息
+    const syncResult = await this.wecomService.syncMessage(cursor, token, MAX_PAGE_SIZE)
 
-      do {
-        const syncResult = await this.wecomService.syncMessage(cursor, token, MAX_PAGE_SIZE)
+    if (syncResult.msg_list?.length) {
+      lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1] as unknown as SyncMessage
+    }
 
-        if (syncResult.msg_list?.length) {
-          lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1] as unknown as SyncMessage
-        }
+    cursor = syncResult.next_cursor || ''
+    hasMore = Boolean(syncResult.has_more)
 
-        cursor = syncResult.next_cursor || ''
-        hasMore = Boolean(syncResult.has_more)
+    // 更新 cursor
+    if (cursor) {
+      await this.cursorManager.updateCursor(userId, cursor)
+    }
 
-        // 更新 cursor
-        if (cursor && userId) {
-          await this.cursorManager.updateCursor(userId, cursor)
-        }
+    // 如果还有更多消息，继续同步
+    while (hasMore) {
+      await new Promise(resolve => setTimeout(resolve, SYNC_INTERVAL))
 
-        if (hasMore) {
-          await new Promise(resolve => setTimeout(resolve, SYNC_INTERVAL))
-        }
-      } while (hasMore)
+      const nextResult = await this.wecomService.syncMessage(cursor, token, MAX_PAGE_SIZE)
+
+      if (nextResult.msg_list?.length) {
+        lastMessage = nextResult.msg_list[nextResult.msg_list.length - 1] as unknown as SyncMessage
+      }
+
+      cursor = nextResult.next_cursor || ''
+      hasMore = Boolean(nextResult.has_more)
+
+      // 更新 cursor
+      if (cursor) {
+        await this.cursorManager.updateCursor(userId, cursor)
+      }
     }
 
     return {
