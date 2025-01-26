@@ -9,6 +9,7 @@ import path from 'path'
 import { env } from '../../../utils/env'
 import { KnowledgeService } from '../../knowledge'
 import { KnowledgeItem } from '../../../types/knowledge'
+import { CursorManager } from './cursor-manager'
 
 interface SyncMessage {
   msgtype: string
@@ -44,11 +45,13 @@ export class EventMessageHandler {
   private readonly iflytekTTSService: IflytekTTSService
   private readonly iflytekASRService: IflytekASRService
   private readonly knowledgeService: KnowledgeService
+  private readonly cursorManager: CursorManager
 
   constructor(private readonly wecomService: WeComService, private readonly openAIService: OpenAIService) {
     this.iflytekTTSService = new IflytekTTSService()
     this.iflytekASRService = new IflytekASRService()
     this.knowledgeService = new KnowledgeService()
+    this.cursorManager = new CursorManager()
     this.initServices().catch(error => {
       logger.error('初始化服务失败:', error)
     })
@@ -336,6 +339,16 @@ export class EventMessageHandler {
   }
 
   /**
+   * 生成用户的唯一标识
+   * @param openKfid - 客服账号ID
+   * @param externalUserId - 客户UserID
+   * @returns 用户唯一标识
+   */
+  private generateUserId(openKfid: string, externalUserId: string): string {
+    return `${openKfid}:${externalUserId}`
+  }
+
+  /**
    * 同步最新消息
    * @param token - 同步消息所需的token
    * @returns 同步结果，包含最新的消息列表
@@ -343,31 +356,45 @@ export class EventMessageHandler {
   private async syncLatestMessage(token: string): Promise<SyncMessageResult> {
     const SYNC_INTERVAL = 200
     const MAX_PAGE_SIZE = 1000
-
     let lastMessage = null
     let cursor = ''
     let hasMore = true
+    let userId = ''
 
-    do {
-      const syncResult = await this.wecomService.syncMessage(cursor, token, MAX_PAGE_SIZE)
+    // 第一次调用，获取最新一条消息以确定用户身份
+    const initialResult = await this.wecomService.syncMessage('', token, 1)
+    const firstMessage = initialResult?.msg_list?.[0] as SyncMessage | undefined
 
-      if (syncResult.msg_list?.length) {
-        lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1] as unknown as SyncMessage
-      }
+    if (firstMessage?.open_kfid && firstMessage?.external_userid) {
+      userId = this.generateUserId(firstMessage.open_kfid, firstMessage.external_userid)
+      cursor = await this.cursorManager.getCursor(userId)
 
-      cursor = syncResult.next_cursor || ''
-      hasMore = Boolean(syncResult.has_more)
+      do {
+        const syncResult = await this.wecomService.syncMessage(cursor, token, MAX_PAGE_SIZE)
 
-      if (hasMore) {
-        await new Promise(resolve => setTimeout(resolve, SYNC_INTERVAL))
-      }
-    } while (hasMore)
+        if (syncResult.msg_list?.length) {
+          lastMessage = syncResult.msg_list[syncResult.msg_list.length - 1] as unknown as SyncMessage
+        }
+
+        cursor = syncResult.next_cursor || ''
+        hasMore = Boolean(syncResult.has_more)
+
+        // 更新 cursor
+        if (cursor && userId) {
+          await this.cursorManager.updateCursor(userId, cursor)
+        }
+
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, SYNC_INTERVAL))
+        }
+      } while (hasMore)
+    }
 
     return {
       errcode: 0,
       msg_list: lastMessage ? [lastMessage] : [],
       has_more: false,
-      next_cursor: '',
+      next_cursor: cursor,
     }
   }
 
