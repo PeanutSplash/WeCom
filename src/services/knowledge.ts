@@ -29,7 +29,7 @@ export class KnowledgeService {
   private readonly MEDIA_EXPIRE_TIME = 3 * 24 * 60 * 60 * 1000
 
   constructor() {
-    this.knowledgeFilePath = path.join(process.cwd(), 'data', 'knowledge.json')
+    this.knowledgeFilePath = path.join(process.cwd(), 'knowledge', 'knowledge.json')
   }
 
   /**
@@ -37,16 +37,16 @@ export class KnowledgeService {
    */
   async init(): Promise<void> {
     try {
-      // 确保数据目录存在
+      logger.info(`初始化知识库，文件路径: ${this.knowledgeFilePath}`)
       const dataDir = path.dirname(this.knowledgeFilePath)
       await fs.mkdir(dataDir, { recursive: true })
 
-      // 尝试加载现有知识库
       try {
         const content = await fs.readFile(this.knowledgeFilePath, 'utf-8')
         this.knowledgeBase = JSON.parse(content)
+        logger.info(`知识库加载成功，包含 ${this.knowledgeBase.items.length} 条记录`)
       } catch (error) {
-        // 如果文件不存在，创建默认知识库
+        logger.warn(`知识库文件不存在，将创建默认知识库: ${error instanceof Error ? error.message : '未知错误'}`)
         await this.save()
       }
     } catch (error) {
