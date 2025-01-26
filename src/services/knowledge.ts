@@ -1,4 +1,5 @@
 import { KnowledgeBase, KnowledgeItem } from '../types/knowledge'
+import { knowledgeData } from '../knowledge/knowledge'
 import path from 'path'
 import { promises as fs } from 'fs'
 
@@ -23,13 +24,14 @@ import { promises as fs } from 'fs'
  * }
  */
 export class KnowledgeService {
-  private knowledgeBase: KnowledgeBase = { items: [] }
+  private knowledgeBase: KnowledgeBase
   private readonly knowledgeFilePath: string
   // 企业微信媒体文件有效期为3天
   private readonly MEDIA_EXPIRE_TIME = 3 * 24 * 60 * 60 * 1000
 
   constructor() {
-    this.knowledgeFilePath = path.join(process.cwd(), 'knowledge', 'knowledge.json')
+    this.knowledgeBase = { ...knowledgeData }
+    this.knowledgeFilePath = path.join(process.cwd(), 'data', 'knowledge-cache.json')
   }
 
   /**
@@ -37,16 +39,28 @@ export class KnowledgeService {
    */
   async init(): Promise<void> {
     try {
-      logger.debug(`知识库路径: ${this.knowledgeFilePath}`)
+      logger.debug(`知识库缓存路径: ${this.knowledgeFilePath}`)
       const dataDir = path.dirname(this.knowledgeFilePath)
       await fs.mkdir(dataDir, { recursive: true })
 
       try {
         const content = await fs.readFile(this.knowledgeFilePath, 'utf-8')
-        this.knowledgeBase = JSON.parse(content)
+        const cache = JSON.parse(content)
+        // 只从缓存中恢复语音媒体相关的信息
+        this.knowledgeBase.items = this.knowledgeBase.items.map(item => {
+          const cachedItem = cache.items.find((cached: KnowledgeItem) => cached.pattern.toString() === item.pattern.toString())
+          if (cachedItem?.voiceMediaId && cachedItem?.voiceMediaExpireTime) {
+            return {
+              ...item,
+              voiceMediaId: cachedItem.voiceMediaId,
+              voiceMediaExpireTime: cachedItem.voiceMediaExpireTime,
+            }
+          }
+          return item
+        })
         logger.info(`知识库加载成功，包含 ${this.knowledgeBase.items.length} 条记录`)
       } catch (error) {
-        logger.warn(`知识库文件不存在，将创建默认知识库: ${error instanceof Error ? error.message : '未知错误'}`)
+        logger.warn(`知识库缓存文件不存在，将创建新的缓存: ${error instanceof Error ? error.message : '未知错误'}`)
         await this.save()
       }
     } catch (error) {
@@ -56,7 +70,8 @@ export class KnowledgeService {
   }
 
   /**
-   * 保存知识库到文件
+   * 保存知识库缓存到文件
+   * 只缓存动态变化的数据（语音媒体信息）
    */
   private async save(): Promise<void> {
     const content = JSON.stringify(this.knowledgeBase, null, 2)

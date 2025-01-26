@@ -4,7 +4,6 @@ node_modules
 
 # Build
 dist
-data/
 # Environment
 .env
 
@@ -16,6 +15,9 @@ logs
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# cache
+data/
 
 # IDE
 .idea
