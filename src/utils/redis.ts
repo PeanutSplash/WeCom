@@ -1,48 +1,91 @@
-import { createClient } from 'redis'
+import { createClient, RedisClientType } from 'redis'
 import { env } from './env'
 
+type RedisConfig = {
+  url: string
+  password?: string
+  socket?: {
+    reconnectStrategy: (retries: number) => number | false
+  }
+}
+
 export class RedisService {
-  private client
-  private readonly DEFAULT_EXPIRE_TIME = 3 * 24 * 60 * 60 // 3天，单位秒
+  private client: RedisClientType
+  private static readonly DEFAULT_EXPIRE_TIME = 3 * 24 * 60 * 60 // 3天
+  private static readonly MAX_RETRY_ATTEMPTS = 5
+  private static readonly RETRY_DELAY = 5000 // 5秒
+  private static readonly CONNECTION_TIMEOUT = 5000 // 5秒
+
   private readonly globalPrefix: string
-  private isInitialized = false
-  private readonly MAX_RETRY_ATTEMPTS = 5
-  private readonly RETRY_DELAY = 5000 // 5秒
   private retryCount = 0
   private isReconnecting = false
+  private isFatalError = false
+  private isConnected = false
+  private isInitialized = false
 
   constructor(customPrefix?: string) {
-    const redisConfig: any = {
+    const redisConfig: RedisConfig = {
       url: env.REDIS_URL || 'redis://localhost:6379',
+      socket: {
+        reconnectStrategy: (retries: number) => {
+          if (this.isFatalError) return false
+          return Math.min(retries * 1000, RedisService.RETRY_DELAY)
+        },
+      },
     }
 
-    // 如果配置了密码,添加密码
     if (env.REDIS_PASSWORD) {
       redisConfig.password = env.REDIS_PASSWORD
     }
 
     this.client = createClient(redisConfig)
     this.globalPrefix = customPrefix || env.REDIS_PREFIX
+    this.setupEventListeners()
+  }
 
-    this.client.on('error', err => {
-      logger.error('Redis 连接错误:', err)
-      this.handleReconnect()
-    })
+  private setupEventListeners(): void {
+    this.client
+      .on('error', this.handleError.bind(this))
+      .on('connect', () => {
+        this.isConnected = true
+      })
+      .on('ready', () => {
+        this.isConnected = true
+        this.isFatalError = false
+        this.retryCount = 0
+        this.isInitialized = true
+        logger.info('Redis 连接就绪')
+      })
+      .on('end', () => {
+        this.isConnected = false
+        this.isInitialized = false
+        logger.warn('Redis 连接已断开')
+      })
+  }
 
-    this.client.on('connect', () => {
-      logger.info('Redis 连接成功')
-    })
+  private handleError(err: Error): void {
+    this.isConnected = false
+    logger.error('Redis 连接错误:', err)
+
+    if (err.message.includes('ECONNREFUSED') && this.retryCount >= RedisService.MAX_RETRY_ATTEMPTS) {
+      this.isFatalError = true
+      logger.error('Redis 服务不可用')
+      return
+    }
+
+    void this.handleReconnect()
   }
 
   private async handleReconnect(): Promise<void> {
     try {
-      if (this.isReconnecting) {
-        logger.warn('Redis 重连正在进行中，跳过本次重连')
+      if (this.isReconnecting || this.isFatalError) {
+        logger.warn('Redis 重连已停止：', this.isFatalError ? '发生致命错误' : '重连正在进行中')
         return
       }
 
-      if (this.retryCount >= this.MAX_RETRY_ATTEMPTS) {
-        logger.error(`Redis 重连失败次数超过最大限制 (${this.MAX_RETRY_ATTEMPTS})，停止重连`)
+      if (this.retryCount >= RedisService.MAX_RETRY_ATTEMPTS) {
+        this.isFatalError = true
+        logger.error(`Redis 重连失败次数超过最大限制 (${RedisService.MAX_RETRY_ATTEMPTS})，停止重连`)
         return
       }
 
@@ -55,16 +98,37 @@ export class RedisService {
         await this.client.disconnect()
       }
 
-      // 添加重连延迟
-      await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY))
+      await new Promise(resolve => setTimeout(resolve, RedisService.RETRY_DELAY))
 
       await this.connect()
 
-      // 重连成功后重置计数
-      this.retryCount = 0
-      logger.info('Redis 重连成功')
+      // 等待连接真正就绪
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Redis 连接超时'))
+        }, RedisService.CONNECTION_TIMEOUT)
+
+        const checkConnection = () => {
+          if (this.isConnected) {
+            clearTimeout(timeout)
+            resolve()
+          } else if (!this.isFatalError) {
+            setTimeout(checkConnection, 100)
+          } else {
+            clearTimeout(timeout)
+            reject(new Error('Redis 连接失败'))
+          }
+        }
+
+        checkConnection()
+      })
+
+      logger.info('Redis 重连成功并就绪')
     } catch (error) {
       logger.error(`Redis 第 ${this.retryCount} 次重连失败:`, error)
+      if (this.retryCount >= RedisService.MAX_RETRY_ATTEMPTS) {
+        this.isFatalError = true
+      }
     } finally {
       this.isReconnecting = false
     }
@@ -74,9 +138,7 @@ export class RedisService {
     if (!this.client.isOpen) {
       try {
         await this.client.connect()
-        this.isInitialized = true
-        this.retryCount = 0 // 重置重试计数
-        logger.info('Redis 连接成功')
+        // 注意：这里不立即设置 isInitialized，等待 ready 事件
       } catch (error) {
         logger.error('Redis 连接失败:', error)
         throw error
@@ -85,7 +147,10 @@ export class RedisService {
   }
 
   private async ensureConnection(): Promise<void> {
-    if (!this.isInitialized) {
+    if (this.isFatalError) {
+      throw new Error('Redis 服务不可用，请检查服务器状态和配置')
+    }
+    if (!this.isInitialized || !this.isConnected) {
       await this.connect()
     }
   }
@@ -104,7 +169,7 @@ export class RedisService {
       if (expireTime) {
         await this.client.setEx(key, expireTime, serializedValue)
       } else {
-        await this.client.setEx(key, this.DEFAULT_EXPIRE_TIME, serializedValue)
+        await this.client.setEx(key, RedisService.DEFAULT_EXPIRE_TIME, serializedValue)
       }
     } catch (error) {
       logger.error('Redis 设置值失败:', error)
@@ -199,5 +264,54 @@ export class RedisService {
       logger.error('获取 Redis 信息失败:', error)
       throw error
     }
+  }
+
+  /**
+   * 批量设置多个键值对
+   */
+  async mset(items: Record<string, any>, expireTime?: number): Promise<void> {
+    await this.ensureConnection()
+    const multi = this.client.multi()
+
+    for (const [key, value] of Object.entries(items)) {
+      const serializedValue = JSON.stringify(value)
+      multi.setEx(key, expireTime || RedisService.DEFAULT_EXPIRE_TIME, serializedValue)
+    }
+
+    await multi.exec()
+  }
+
+  /**
+   * 批量获取多个键的值
+   */
+  async mget<T>(keys: string[]): Promise<(T | null)[]> {
+    await this.ensureConnection()
+    const values = await this.client.mGet(keys)
+
+    return values.map(value => (value ? (JSON.parse(value) as T) : null))
+  }
+
+  /**
+   * 获取键的剩余过期时间（秒）
+   */
+  async getTTL(key: string): Promise<number> {
+    await this.ensureConnection()
+    return this.client.ttl(key)
+  }
+
+  /**
+   * 更新键的过期时间
+   */
+  async updateExpiry(key: string, expireTime: number): Promise<boolean> {
+    await this.ensureConnection()
+    return await this.client.expire(key, expireTime)
+  }
+
+  /**
+   * 移除键的过期时间
+   */
+  async persistKey(key: string): Promise<boolean> {
+    await this.ensureConnection()
+    return await this.client.persist(key)
   }
 }
