@@ -1,8 +1,8 @@
-const path = require('path');
-const nodeExternals = require('webpack-node-externals');
-const CopyPlugin = require('copy-webpack-plugin');
-const ProgressBarPlugin = require('progress-bar-webpack-plugin');
-const FriendlyErrorsWebpackPlugin = require('friendly-errors-webpack-plugin');
+const path = require('path')
+const nodeExternals = require('webpack-node-externals')
+const CopyPlugin = require('copy-webpack-plugin')
+const ProgressBarPlugin = require('progress-bar-webpack-plugin')
+const FriendlyErrorsWebpackPlugin = require('friendly-errors-webpack-plugin')
 
 module.exports = {
   target: 'node',
@@ -11,32 +11,33 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'index.js',
-    clean: true
+    clean: true,
   },
   module: {
     rules: [
       {
         test: /\.ts$/,
         use: 'ts-loader',
-        exclude: /node_modules/
-      }
-    ]
+        exclude: /node_modules/,
+      },
+    ],
   },
   resolve: {
-    extensions: ['.ts', '.js']
+    extensions: ['.ts', '.js'],
   },
   externals: [nodeExternals()],
   plugins: [
     new CopyPlugin({
       patterns: [
-        { from: 'package.json', to: 'package.json' }
+        { from: 'package.json', to: 'package.json' },
+        { from: 'src/public', to: 'public' },
       ],
     }),
     new ProgressBarPlugin(),
     new FriendlyErrorsWebpackPlugin(),
   ],
   optimization: {
-    minimize: process.env.NODE_ENV === 'production'
+    minimize: process.env.NODE_ENV === 'production',
   },
-  stats: 'errors-only'
-}; 
+  stats: 'errors-only',
+}

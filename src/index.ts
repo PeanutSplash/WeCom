@@ -49,6 +49,14 @@ const openAIService = new OpenAIService()
 app.use('/api/wecom', setupWeComRoutes(wecomService))
 app.use('/api/wecom', setupCallbackRoutes(wecomService, openAIService))
 
+// 配置静态文件服务
+app.use(express.static(path.join(__dirname, 'public')))
+
+// 默认路由
+app.get('/', (req: express.Request, res: express.Response) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'))
+})
+
 // 健康检查
 app.get('/health', (req: express.Request, res: express.Response) => {
   res.json({ status: 'ok' })
