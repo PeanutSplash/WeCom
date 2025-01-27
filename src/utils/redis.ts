@@ -6,6 +6,10 @@ export class RedisService {
   private readonly DEFAULT_EXPIRE_TIME = 3 * 24 * 60 * 60 // 3天，单位秒
   private readonly globalPrefix: string
   private isInitialized = false
+  private readonly MAX_RETRY_ATTEMPTS = 5
+  private readonly RETRY_DELAY = 5000 // 5秒
+  private retryCount = 0
+  private isReconnecting = false
 
   constructor(customPrefix?: string) {
     const redisConfig: any = {
@@ -32,19 +36,51 @@ export class RedisService {
 
   private async handleReconnect(): Promise<void> {
     try {
+      if (this.isReconnecting) {
+        logger.warn('Redis 重连正在进行中，跳过本次重连')
+        return
+      }
+
+      if (this.retryCount >= this.MAX_RETRY_ATTEMPTS) {
+        logger.error(`Redis 重连失败次数超过最大限制 (${this.MAX_RETRY_ATTEMPTS})，停止重连`)
+        return
+      }
+
+      this.isReconnecting = true
+      this.retryCount++
+
+      logger.info(`Redis 开始第 ${this.retryCount} 次重连尝试`)
+
       if (this.client.isOpen) {
         await this.client.disconnect()
       }
+
+      // 添加重连延迟
+      await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY))
+
       await this.connect()
+
+      // 重连成功后重置计数
+      this.retryCount = 0
+      logger.info('Redis 重连成功')
     } catch (error) {
-      logger.error('Redis 重连失败:', error)
+      logger.error(`Redis 第 ${this.retryCount} 次重连失败:`, error)
+    } finally {
+      this.isReconnecting = false
     }
   }
 
   async connect(): Promise<void> {
     if (!this.client.isOpen) {
-      await this.client.connect()
-      this.isInitialized = true
+      try {
+        await this.client.connect()
+        this.isInitialized = true
+        this.retryCount = 0 // 重置重试计数
+        logger.info('Redis 连接成功')
+      } catch (error) {
+        logger.error('Redis 连接失败:', error)
+        throw error
+      }
     }
   }
 
