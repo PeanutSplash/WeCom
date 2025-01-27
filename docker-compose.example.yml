@@ -27,6 +27,11 @@ services:
 
       # 语音识别服务选择
       - SPEECH_RECOGNITION_SERVICE=${SPEECH_RECOGNITION_SERVICE}
+
+      # Redis 配置
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PREFIX=${REDIS_PREFIX:-wecom-kf}
     volumes:
       - ./media:/app/media
       - ./logs:/app/logs

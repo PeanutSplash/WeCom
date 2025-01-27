@@ -25,6 +25,11 @@ const envSchema = z.object({
 
   // 语音识别服务选择
   SPEECH_RECOGNITION_SERVICE: z.enum(['openai', 'iflytek']).default('iflytek'),
+
+  // Redis 配置
+  REDIS_URL: z.string().url().optional(),
+  REDIS_PASSWORD: z.string().optional(),
+  REDIS_PREFIX: z.string().default('wecom-kf'),
 })
 
 // 验证环境变量

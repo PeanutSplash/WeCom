@@ -1,7 +1,6 @@
 import { KnowledgeBase, KnowledgeItem } from '../types/knowledge'
 import { knowledgeData } from '../knowledge/knowledge'
-import path from 'path'
-import { promises as fs } from 'fs'
+import { RedisService } from '../utils/redis'
 
 /**
  * 知识库服务类
@@ -25,13 +24,12 @@ import { promises as fs } from 'fs'
  */
 export class KnowledgeService {
   private knowledgeBase: KnowledgeBase
-  private readonly knowledgeFilePath: string
-  // 企业微信媒体文件有效期为3天
-  private readonly MEDIA_EXPIRE_TIME = 3 * 24 * 60 * 60 * 1000
+  private readonly redis: RedisService
+  private readonly MEDIA_EXPIRE_TIME = 3 * 24 * 60 * 60 // 3天，单位秒
 
   constructor() {
     this.knowledgeBase = { ...knowledgeData }
-    this.knowledgeFilePath = path.join(process.cwd(), 'data', 'knowledge-cache.json')
+    this.redis = new RedisService()
   }
 
   /**
@@ -39,43 +37,52 @@ export class KnowledgeService {
    */
   async init(): Promise<void> {
     try {
-      logger.debug(`知识库缓存路径: ${this.knowledgeFilePath}`)
-      const dataDir = path.dirname(this.knowledgeFilePath)
-      await fs.mkdir(dataDir, { recursive: true })
-
-      try {
-        const content = await fs.readFile(this.knowledgeFilePath, 'utf-8')
-        const cache = JSON.parse(content)
-        // 只从缓存中恢复语音媒体相关的信息
-        this.knowledgeBase.items = this.knowledgeBase.items.map(item => {
-          const cachedItem = cache.items.find((cached: KnowledgeItem) => cached.pattern.toString() === item.pattern.toString())
-          if (cachedItem?.voiceMediaId && cachedItem?.voiceMediaExpireTime) {
-            return {
-              ...item,
-              voiceMediaId: cachedItem.voiceMediaId,
-              voiceMediaExpireTime: cachedItem.voiceMediaExpireTime,
-            }
-          }
-          return item
-        })
-        logger.info(`知识库加载成功，包含 ${this.knowledgeBase.items.length} 条记录`)
-      } catch (error) {
-        logger.warn(`知识库缓存文件不存在，将创建新的缓存: ${error instanceof Error ? error.message : '未知错误'}`)
-        await this.save()
-      }
+      await this.loadCachedMedia()
+      logger.info(`知识库加载成功，包含 ${this.knowledgeBase.items.length} 条记录`)
     } catch (error) {
       logger.error('初始化知识库失败:', error)
       throw error
     }
   }
 
-  /**
-   * 保存知识库缓存到文件
-   * 只缓存动态变化的数据（语音媒体信息）
-   */
-  private async save(): Promise<void> {
-    const content = JSON.stringify(this.knowledgeBase, null, 2)
-    await fs.writeFile(this.knowledgeFilePath, content, 'utf-8')
+  private async loadCachedMedia(): Promise<void> {
+    for (const item of this.knowledgeBase.items) {
+      const pattern = item.pattern.toString()
+
+      // 加载语音媒体缓存
+      const voiceKey = this.getVoiceMediaKey(pattern)
+      const voiceCache = await this.redis.get<{
+        mediaId: string
+        expireTime: number
+      }>(voiceKey)
+
+      if (voiceCache && voiceCache.expireTime > Date.now()) {
+        item.voiceMediaId = voiceCache.mediaId
+        item.voiceMediaExpireTime = voiceCache.expireTime
+      }
+
+      // 加载链接缩略图缓存
+      if (item.link) {
+        const thumbKey = this.getThumbMediaKey(pattern)
+        const thumbCache = await this.redis.get<{
+          mediaId: string
+          expireTime: number
+        }>(thumbKey)
+
+        if (thumbCache && thumbCache.expireTime > Date.now()) {
+          item.link.thumbMediaId = thumbCache.mediaId
+          item.link.thumbMediaExpireTime = thumbCache.expireTime
+        }
+      }
+    }
+  }
+
+  private getVoiceMediaKey(pattern: string): string {
+    return this.redis.generateKey('media', 'voice', pattern)
+  }
+
+  private getThumbMediaKey(pattern: string): string {
+    return this.redis.generateKey('media', 'thumb', pattern)
   }
 
   /**
@@ -109,11 +116,22 @@ export class KnowledgeService {
    * 更新知识条目的语音媒体ID
    */
   async updateVoiceMediaId(pattern: string, mediaId: string): Promise<void> {
+    const expireTime = Date.now() + this.MEDIA_EXPIRE_TIME * 1000
+    const key = this.getVoiceMediaKey(pattern)
+
+    await this.redis.set(
+      key,
+      {
+        mediaId,
+        expireTime,
+      },
+      this.MEDIA_EXPIRE_TIME,
+    )
+
     const index = this.knowledgeBase.items.findIndex(item => item.pattern.toString() === pattern)
     if (index !== -1) {
       this.knowledgeBase.items[index].voiceMediaId = mediaId
-      this.knowledgeBase.items[index].voiceMediaExpireTime = Date.now() + this.MEDIA_EXPIRE_TIME
-      await this.save()
+      this.knowledgeBase.items[index].voiceMediaExpireTime = expireTime
     }
   }
 
@@ -128,18 +146,22 @@ export class KnowledgeService {
    * 检查链接缩略图媒体ID是否有效
    */
   private isLinkThumbMediaValid(item: KnowledgeItem): boolean {
-    return !!(
-      item.link?.thumbMediaId &&
-      item.link?.thumbMediaExpireTime &&
-      item.link.thumbMediaExpireTime > Date.now()
-    )
+    return !!(item.link?.thumbMediaId && item.link?.thumbMediaExpireTime && item.link.thumbMediaExpireTime > Date.now())
   }
 
   /**
    * 检查链接缩略图媒体ID是否有效（公共方法）
    */
   async checkLinkThumbMediaValid(item: KnowledgeItem): Promise<boolean> {
-    return this.isLinkThumbMediaValid(item)
+    if (!item.link?.thumbMediaId) return false
+
+    const key = this.getThumbMediaKey(item.pattern.toString())
+    const cache = await this.redis.get<{
+      mediaId: string
+      expireTime: number
+    }>(key)
+
+    return !!(cache && cache.expireTime > Date.now())
   }
 
   /**
@@ -154,50 +176,19 @@ export class KnowledgeService {
    */
   findMatch(input: string): KnowledgeItem | null {
     for (const item of this.knowledgeBase.items) {
-      if (item.isRegex) {
-        const regex = new RegExp(item.pattern)
-        if (regex.test(input)) {
-          // 如果语音媒体ID已过期，清除它
-          if (item.voiceMediaId && !this.isVoiceMediaValid(item)) {
-            item.voiceMediaId = undefined
-            item.voiceMediaExpireTime = undefined
-            this.save().catch(error => {
-              logger.error('清除过期语音媒体ID失败:', error)
-            })
-          }
-          // 如果链接缩略图媒体ID已过期，清除它
-          if (item.link?.thumbMediaId && !this.isLinkThumbMediaValid(item)) {
-            item.link.thumbMediaId = undefined
-            item.link.thumbMediaExpireTime = undefined
-            this.save().catch(error => {
-              logger.error('清除过期图片媒体ID失败:', error)
-            })
-          }
-          return item
-        }
-      } else {
-        if (input.includes(item.pattern.toString())) {
-          // 如果语音媒体ID已过期，清除它
-          if (item.voiceMediaId && !this.isVoiceMediaValid(item)) {
-            item.voiceMediaId = undefined
-            item.voiceMediaExpireTime = undefined
-            this.save().catch(error => {
-              logger.error('清除过期语音媒体ID失败:', error)
-            })
-          }
-          // 如果链接缩略图媒体ID已过期，清除它
-          if (item.link?.thumbMediaId && !this.isLinkThumbMediaValid(item)) {
-            item.link.thumbMediaId = undefined
-            item.link.thumbMediaExpireTime = undefined
-            this.save().catch(error => {
-              logger.error('清除过期图片媒体ID失败:', error)
-            })
-          }
-          return item
-        }
+      if (this.isMatch(item, input)) {
+        return item
       }
     }
     return null
+  }
+
+  private isMatch(item: KnowledgeItem, input: string): boolean {
+    if (item.isRegex) {
+      const regex = new RegExp(item.pattern)
+      return regex.test(input)
+    }
+    return input.includes(item.pattern.toString())
   }
 
   /**
@@ -211,13 +202,26 @@ export class KnowledgeService {
    * 更新知识条目的链接缩略图媒体ID
    */
   async updateLinkThumbMediaId(pattern: string, mediaId: string): Promise<void> {
+    const expireTime = Date.now() + this.MEDIA_EXPIRE_TIME * 1000
+    const key = this.getThumbMediaKey(pattern)
+
+    await this.redis.set(
+      key,
+      {
+        mediaId,
+        expireTime,
+      },
+      this.MEDIA_EXPIRE_TIME,
+    )
+
     const index = this.knowledgeBase.items.findIndex(item => item.pattern.toString() === pattern)
-    const item = this.knowledgeBase.items[index]
-    if (index !== -1 && item?.link) {
-      const link = item.link
-      link.thumbMediaId = mediaId
-      link.thumbMediaExpireTime = Date.now() + this.MEDIA_EXPIRE_TIME
-      await this.save()
+    if (index !== -1 && this.knowledgeBase.items[index].link) {
+      this.knowledgeBase.items[index].link!.thumbMediaId = mediaId
+      this.knowledgeBase.items[index].link!.thumbMediaExpireTime = expireTime
     }
+  }
+
+  private async save(): Promise<void> {
+    // Implementation of save method
   }
 }
