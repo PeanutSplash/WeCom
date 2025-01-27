@@ -125,6 +125,24 @@ export class KnowledgeService {
   }
 
   /**
+   * 检查链接缩略图媒体ID是否有效
+   */
+  private isLinkThumbMediaValid(item: KnowledgeItem): boolean {
+    return !!(
+      item.link?.thumbMediaId &&
+      item.link?.thumbMediaExpireTime &&
+      item.link.thumbMediaExpireTime > Date.now()
+    )
+  }
+
+  /**
+   * 检查链接缩略图媒体ID是否有效（公共方法）
+   */
+  async checkLinkThumbMediaValid(item: KnowledgeItem): Promise<boolean> {
+    return this.isLinkThumbMediaValid(item)
+  }
+
+  /**
    * 查找匹配的知识条目
    * @param input 输入文本
    * @returns 匹配到的知识条目或 null
@@ -147,6 +165,14 @@ export class KnowledgeService {
               logger.error('清除过期语音媒体ID失败:', error)
             })
           }
+          // 如果链接缩略图媒体ID已过期，清除它
+          if (item.link?.thumbMediaId && !this.isLinkThumbMediaValid(item)) {
+            item.link.thumbMediaId = undefined
+            item.link.thumbMediaExpireTime = undefined
+            this.save().catch(error => {
+              logger.error('清除过期图片媒体ID失败:', error)
+            })
+          }
           return item
         }
       } else {
@@ -157,6 +183,14 @@ export class KnowledgeService {
             item.voiceMediaExpireTime = undefined
             this.save().catch(error => {
               logger.error('清除过期语音媒体ID失败:', error)
+            })
+          }
+          // 如果链接缩略图媒体ID已过期，清除它
+          if (item.link?.thumbMediaId && !this.isLinkThumbMediaValid(item)) {
+            item.link.thumbMediaId = undefined
+            item.link.thumbMediaExpireTime = undefined
+            this.save().catch(error => {
+              logger.error('清除过期图片媒体ID失败:', error)
             })
           }
           return item
@@ -171,5 +205,19 @@ export class KnowledgeService {
    */
   getAll(): KnowledgeItem[] {
     return this.knowledgeBase.items
+  }
+
+  /**
+   * 更新知识条目的链接缩略图媒体ID
+   */
+  async updateLinkThumbMediaId(pattern: string, mediaId: string): Promise<void> {
+    const index = this.knowledgeBase.items.findIndex(item => item.pattern.toString() === pattern)
+    const item = this.knowledgeBase.items[index]
+    if (index !== -1 && item?.link) {
+      const link = item.link
+      link.thumbMediaId = mediaId
+      link.thumbMediaExpireTime = Date.now() + this.MEDIA_EXPIRE_TIME
+      await this.save()
+    }
   }
 }

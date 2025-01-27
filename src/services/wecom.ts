@@ -23,6 +23,18 @@ interface SendTextMessageParams {
   }
 }
 
+interface SendLinkMessageParams {
+  touser: string
+  open_kfid: string
+  msgtype: MessageType.LINK
+  link: {
+    title: string
+    desc?: string
+    url: string
+    thumb_media_id: string
+  }
+}
+
 export class WeComService {
   private accessToken: string | null = null
   private tokenExpireTime: number = 0
@@ -329,5 +341,15 @@ export class WeComService {
 
   async sendTextMessage(params: SendTextMessageParams): Promise<WeComResponse> {
     return this.sendMessage(params)
+  }
+
+  async sendLinkMessage(params: SendLinkMessageParams): Promise<WeComResponse> {
+    try {
+      logger.info(`准备发送链接消息，标题: ${params.link.title}, URL: ${params.link.url}`)
+      return this.sendMessage(params)
+    } catch (error) {
+      logger.error('发送链接消息时发生错误:', error)
+      throw error
+    }
   }
 }

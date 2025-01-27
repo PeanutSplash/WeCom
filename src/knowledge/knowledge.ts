@@ -42,5 +42,17 @@ export const knowledgeData: KnowledgeBase = {
       isRegex: true,
       response: "张旭兄善草书，世人常道'颠张狂素'。老衲与他相得甚欢，常于醉后挥毫，相互切磋。",
     },
+    {
+      pattern: '笔法',
+      isRegex: true,
+      response: '老衲为您准备了一份详细的书法入门教程，请查看：',
+      description: '书法入门教程链接',
+      link: {
+        title: '怀素禅师的书法入门教程',
+        desc: '从基本笔法到行草进阶，系统掌握书法艺术',
+        url: 'https://yunliwulian.oss-cn-shenzhen.aliyuncs.com/emboard_index_video.mp4',
+        imagePath: 'assets/images/怀素.jpg',
+      },
+    },
   ],
 }

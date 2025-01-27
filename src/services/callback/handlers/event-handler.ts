@@ -41,6 +41,16 @@ interface SendVoiceMessageParams extends SendMessageParams {
   voice: { media_id: string }
 }
 
+interface SendLinkMessageParams extends SendMessageParams {
+  msgtype: MessageType.LINK
+  link: {
+    title: string
+    desc?: string
+    url: string
+    thumb_media_id: string
+  }
+}
+
 export class EventMessageHandler {
   private readonly iflytekTTSService: IflytekTTSService
   private readonly iflytekASRService: IflytekASRService
@@ -125,6 +135,41 @@ export class EventMessageHandler {
 
       if (knowledgeMatch) {
         logger.info('找到知识库匹配:', { pattern: knowledgeMatch.pattern, response: knowledgeMatch.response })
+
+        // 如果配置了链接消息，优先发送链接消息
+        if (knowledgeMatch.link) {
+          try {
+            // 检查是否需要上传图片
+            const isThumbValid = await this.knowledgeService.checkLinkThumbMediaValid(knowledgeMatch)
+            if (!knowledgeMatch.link.thumbMediaId || !isThumbValid) {
+              logger.info('开始上传链接缩略图:', knowledgeMatch.link.imagePath)
+              try {
+                const imageBuffer = await fs.readFile(knowledgeMatch.link.imagePath)
+                const mediaId = await this.wecomService.uploadMedia('image', imageBuffer, path.basename(knowledgeMatch.link.imagePath))
+                await this.knowledgeService.updateLinkThumbMediaId(knowledgeMatch.pattern.toString(), mediaId)
+                knowledgeMatch.link.thumbMediaId = mediaId
+              } catch (error) {
+                logger.error('上传链接缩略图失败:', error)
+                throw error
+              }
+            }
+
+            await this.sendMessage<SendLinkMessageParams>({
+              touser: message.external_userid,
+              open_kfid: message.open_kfid,
+              msgtype: MessageType.LINK,
+              link: {
+                title: knowledgeMatch.link.title,
+                desc: knowledgeMatch.link.desc,
+                url: knowledgeMatch.link.url,
+                thumb_media_id: knowledgeMatch.link.thumbMediaId!
+              }
+            })
+            return
+          } catch (error) {
+            logger.warn('发送链接消息失败，尝试发送语音消息:', error)
+          }
+        }
 
         // 检查是否有有效的语音媒体ID
         if (knowledgeMatch.voiceMediaId) {
@@ -335,6 +380,8 @@ export class EventMessageHandler {
       await this.wecomService.sendTextMessage(message as SendTextMessageParams)
     } else if (message.msgtype === MessageType.VOICE) {
       await this.wecomService.sendVoiceMessage(message as SendVoiceMessageParams)
+    } else if (message.msgtype === MessageType.LINK) {
+      await this.wecomService.sendLinkMessage(message as SendLinkMessageParams)
     }
   }
 
