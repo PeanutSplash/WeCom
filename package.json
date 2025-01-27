@@ -13,7 +13,6 @@
     "test:api": "ts-node src/test/api.test.ts",
     "test:api:prod": "cross-env NODE_ENV=production ts-node src/test/api.test.ts",
     "clean": "rimraf dist",
-    "build:prod": "pnpm run clean && pnpm run build",
     "start:prod": "pnpm run build && node dist/index.js",
     "docker:build": "docker build -t peanutsplash/wecom-kf:latest .",
     "docker:push": "docker push peanutsplash/wecom-kf:latest",
@@ -67,6 +66,7 @@
     "typescript": "~5.3.3",
     "webpack": "^5.90.1",
     "webpack-cli": "^5.1.4",
-    "webpack-node-externals": "^3.0.0"
+    "webpack-node-externals": "^3.0.0",
+    "terser-webpack-plugin": "^5.3.10"
   }
 }

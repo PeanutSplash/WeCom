@@ -10,7 +10,7 @@
 
 ## 技术栈
 
-- Node.js 18+ 
+- Node.js 18+
 - TypeScript 5.3+
 - Express 4.18
 - FFmpeg (音频转换)
@@ -77,11 +77,13 @@ ffmpeg -version
 ### 配置
 
 1. 复制环境变量模板
+
 ```bash
 cp .env.example .env
 ```
 
 2. 配置环境变量
+
 ```env
 # 企业微信配置
 WECOM_CORPID=your_corpid
@@ -110,7 +112,7 @@ pnpm lint
 pnpm lint:fix
 
 # 构建
-pnpm build:prod
+pnpm build
 
 # 生产环境运行
 pnpm start:prod
@@ -143,6 +145,7 @@ src/
 ### 消息相关
 
 - 发送消息
+
   - POST `/api/wecom/send`
   - 支持多种消息类型(text/image/voice/video/file/link/miniprogram/msgmenu/location)
 
@@ -154,6 +157,7 @@ src/
 ### 客服相关
 
 - 获取客服列表
+
   - GET `/api/wecom/servicer/list`
 
 - 获取客服账号列表
@@ -163,6 +167,7 @@ src/
 ### 回调接口
 
 - 回调消息处理
+
   - POST `/api/wecom/callback`
   - 自动解密和验证签名
   - 支持事件消息处理
@@ -170,18 +175,20 @@ src/
 
 - 回调配置验证
   - GET `/api/wecom/callback`
-  - 用于配置回调URL时的验证
+  - 用于配置回调 URL 时的验证
 
 ## Docker 部署
 
 ### 使用 Docker Compose（推荐）
 
 1. 配置 docker-compose.yml
+
 ```bash
 cp docker-compose.example.yml docker-compose.yml
 ```
 
 2. 构建并启动服务
+
 ```bash
 # 构建并启动
 pnpm docker:compose:build
@@ -193,11 +200,13 @@ pnpm docker:logs
 ### 手动 Docker 部署
 
 1. 构建镜像
+
 ```bash
 pnpm docker:build
 ```
 
 2. 运行容器
+
 ```bash
 docker run -p 3000:3000 --env-file .env peanutsplash/wecom-kf:latest
 ```
@@ -207,6 +216,7 @@ docker run -p 3000:3000 --env-file .env peanutsplash/wecom-kf:latest
 ### 配置步骤
 
 1. 启动服务
+
 ```bash
 # 开发环境
 pnpm dev
@@ -226,6 +236,7 @@ pnpm start:prod
   - 点击【保存】并等待验证通过
 
 3. 测试回调接口
+
 ```bash
 # 测试开发环境
 pnpm test:api
@@ -244,6 +255,7 @@ pnpm test:api:prod
 - 事件消息（进入会话、消息发送失败、消息撤回等）
 
 每个回调消息都会：
+
 1. 验证消息签名
 2. 解密消息内容
 3. 根据消息类型进行相应处理
@@ -252,16 +264,19 @@ pnpm test:api:prod
 ## 常见问题排查
 
 1. 回调验证失败
+
 - 检查 Token 和 EncodingAESKey 配置是否正确
 - 确认回调 URL 是否完整且正确
 - 查看服务日志中的具体错误信息
 
 2. 收不到回调消息
+
 - 确认服务是否正常运行
 - 检查回调配置是否已保存并验证通过
 - 查看服务日志是否有接收到请求
 
 3. 消息处理失败
+
 - 检查日志中的错误信息
 - 确认消息格式是否符合预期
 - 验证相关服务（如语音转换）是否正常运行
