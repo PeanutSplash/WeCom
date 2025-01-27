@@ -7,6 +7,8 @@
 - 客服账号管理
 - 消息历史同步
 - AI 智能回复（基于 OpenAI）
+- 知识库自动回复
+- 媒体文件缓存管理
 
 ## 技术栈
 
@@ -18,6 +20,7 @@
 - Webpack 5 (构建工具)
 - Docker & Docker Compose
 - OpenAI API (智能对话)
+- Redis (缓存管理)
 
 ## 主要功能
 
@@ -26,12 +29,14 @@
   - 语音消息自动转换（AMR 转 MP3）
   - 消息加密解密
   - AI 智能自动回复
+  - 知识库匹配自动回复
 - 客服管理
   - 获取客服列表
   - 客服账号管理
 - 历史消息同步
   - 支持增量同步
-  - 游标分页
+  - 游标分页与持久化
+  - 多用户游标管理
 - 安全验证
   - 回调消息签名验证
   - 消息内容加密传输
@@ -40,6 +45,14 @@
   - 基于 OpenAI GPT 模型
   - 智能上下文理解
   - 自然语言处理
+- 知识库管理
+  - 支持正则匹配规则
+  - 多媒体内容回复
+  - 媒体文件 ID 自动更新
+- 缓存管理
+  - Redis 媒体文件缓存
+  - 自动过期清理
+  - 性能优化
 
 ## 快速开始
 
@@ -128,16 +141,79 @@ src/
 │   └── callback.ts   # 回调处理接口
 ├── services/         # 业务逻辑
 │   ├── wecom.ts      # 企业微信服务
-│   ├── callback.ts   # 回调处理服务
-│   └── openai.ts     # OpenAI 服务
+│   ├── callback/     # 回调处理服务
+│   │   └── handlers/ # 消息处理器
+│   ├── openai.ts     # OpenAI 服务
+│   └── knowledge.ts  # 知识库服务
 ├── types/            # TypeScript 类型定义
-│   └── wecom.ts      # 企业微信相关类型
+│   ├── wecom.ts      # 企业微信相关类型
+│   └── knowledge.ts  # 知识库相关类型
 ├── utils/            # 工具函数
 │   ├── audio.ts      # 音频处理
 │   ├── wecom.ts      # 企业微信工具
+│   ├── redis.ts      # Redis 工具
 │   └── logger.ts     # 日志工具
 └── test/            # 测试文件
     └── api.test.ts   # API 测试
+```
+
+## 数据存储
+
+### Redis 缓存
+
+用于存储：
+- 媒体文件 ID 缓存（3天过期）
+- 临时会话数据
+- 性能优化相关数据
+
+### 本地文件存储
+
+- `data/knowledge-cache.json`: 知识库数据
+- `data/cursor-store.json`: 消息同步游标数据
+
+## 配置说明
+
+### Redis 配置
+
+在 `.env` 文件中添加以下配置：
+
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your_password
+REDIS_DB=0
+```
+
+### 知识库配置
+
+知识库数据结构 (`data/knowledge-cache.json`):
+
+```json
+{
+  "items": [
+    {
+      "pattern": "你好|hello",
+      "response": "你好！很高兴见到你",
+      "description": "基础问候语",
+      "isRegex": true,
+      "mediaId": "MEDIA_ID",
+      "mediaType": "voice"
+    }
+  ]
+}
+```
+
+### 游标存储
+
+游标数据结构 (`data/cursor-store.json`):
+
+```json
+{
+  "user123": {
+    "cursor": "cursor_string",
+    "lastUpdateTime": 1678234567890
+  }
+}
 ```
 
 ## API 接口
@@ -280,6 +356,18 @@ pnpm test:api:prod
 - 检查日志中的错误信息
 - 确认消息格式是否符合预期
 - 验证相关服务（如语音转换）是否正常运行
+
+4. Redis 连接问题
+
+- 检查 Redis 服务是否正常运行
+- 验证 Redis 配置信息是否正确
+- 确认防火墙设置是否允许连接
+
+5. 知识库匹配问题
+
+- 检查正则表达式语法是否正确
+- 确认知识库数据文件是否正确加载
+- 验证媒体文件 ID 是否有效
 
 ## 注意事项
 
