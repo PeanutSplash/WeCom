@@ -47,6 +47,7 @@ RUN apk add --no-cache curl xz && \
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/assets ./assets
 
 # 创建并设置媒体文件存储目录权限
 RUN mkdir -p media && chmod 777 media
