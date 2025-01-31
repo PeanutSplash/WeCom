@@ -162,8 +162,8 @@ export class EventMessageHandler {
                 title: knowledgeMatch.link.title,
                 desc: knowledgeMatch.link.desc,
                 url: knowledgeMatch.link.url,
-                thumb_media_id: knowledgeMatch.link.thumbMediaId!
-              }
+                thumb_media_id: knowledgeMatch.link.thumbMediaId!,
+              },
             })
             return
           } catch (error) {
@@ -209,6 +209,9 @@ export class EventMessageHandler {
    */
   private async generateAndSendVoice(knowledgeItem: KnowledgeItem, message: SyncMessage): Promise<void> {
     try {
+      if (!knowledgeItem.response) {
+        throw new Error('知识库响应内容为空')
+      }
       const audioBuffer = await this.iflytekTTSService.textToSpeech(knowledgeItem.response)
       const amrResult = await convertMp3ToAmr(audioBuffer)
 
@@ -237,7 +240,7 @@ export class EventMessageHandler {
         touser: message.external_userid,
         open_kfid: message.open_kfid,
         msgtype: MessageType.TEXT,
-        text: { content: knowledgeItem.response },
+        text: { content: knowledgeItem.response! },
       })
     }
   }
