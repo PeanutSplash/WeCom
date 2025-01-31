@@ -45,12 +45,20 @@ export const knowledgeData: KnowledgeBase = {
     {
       pattern: '笔法',
       isRegex: true,
-      response: '老衲为您准备了一份详细的书法入门教程，请查看：',
-      description: '书法入门教程链接',
       link: {
         title: '怀素禅师的书法入门教程',
         desc: '从基本笔法到行草进阶，系统掌握书法艺术',
         url: 'https://yunliwulian.oss-cn-shenzhen.aliyuncs.com/emboard_index_video.mp4',
+        imagePath: 'assets/images/怀素.jpg',
+      },
+    },
+    {
+      pattern: '介绍怀素',
+      isRegex: true,
+      link: {
+        title: '怀素禅师的介绍',
+        desc: '点击播放怀素介绍',
+        url: 'http://www.aimyjj.top/dyplay.php?url=https://v.douyin.com/ifqdCGp2',
         imagePath: 'assets/images/怀素.jpg',
       },
     },
