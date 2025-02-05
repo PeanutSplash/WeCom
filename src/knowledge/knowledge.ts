@@ -58,7 +58,7 @@ export const knowledgeData: KnowledgeBase = {
       link: {
         title: '怀素禅师的介绍',
         desc: '点击播放怀素介绍',
-        url: 'https://ourls.zeabur.app/?https://qm.qq.com/cgi-bin/qm/qr?url=http://www.aimyjj.top/dyplay.php?url=https://v.douyin.com/ifqdCGp2',
+        url: 'https://hwavc.clewm.net/6f07c1e4bd9f0d3fd0a68f85d01212bf.H_25_4.mp4?auth_key=42f8e8d814a0e59b2710b851c2ab5552&timestamp=1738754797',
         imagePath: 'assets/images/怀素.jpg',
       },
     },
